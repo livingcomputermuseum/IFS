@@ -1,4 +1,5 @@
-﻿using System;
+﻿using IFS.Logging;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -48,7 +49,7 @@ namespace IFS
                     break;
 
                 default:
-                    // Unhandled, TODO: log it
+                    Log.Write(LogLevel.UnhandledProtocol, String.Format("Unhandled misc. protocol {0}", p.Type));
                     break;
             }
         }
@@ -144,7 +145,7 @@ namespace IFS
             // and see if we have a match.
             //
             PUPPort lookupAddress = new PUPPort(p.Contents, 0);
-            string hostName = DirectoryServices.Instance.AddressLookup(lookupAddress);
+            string hostName = DirectoryServices.Instance.AddressLookup(new HostAddress(lookupAddress.Network, lookupAddress.Host));
 
             if (!String.IsNullOrEmpty(hostName))
             {

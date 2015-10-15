@@ -5,20 +5,36 @@ using System.Text;
 using System.Threading.Tasks;
 
 using PcapDotNet.Core;
+using PcapDotNet.Core.Extensions;
 using PcapDotNet.Packets;
+using PcapDotNet.Packets.Ethernet;
 
 namespace IFS.Transport
 {
     public struct EthernetInterface
     {
-        public EthernetInterface(string name, string description)
+        public EthernetInterface(string name, string description, MacAddress macAddress)
         {
             Name = name;
             Description = description;
+            MacAddress = macAddress;
         }
 
-        public string Name;
-        public string Description;
+        public static List<EthernetInterface> EnumerateDevices()
+        {
+            List<EthernetInterface> interfaces = new List<EthernetInterface>();
+
+            foreach (LivePacketDevice device in LivePacketDevice.AllLocalMachine)
+            {
+                interfaces.Add(new EthernetInterface(device.Name, device.Description, device.GetMacAddress()));
+            }
+
+            return interfaces;
+        }
+
+        public string       Name;
+        public string       Description;
+        public MacAddress   MacAddress;
     }
 
     /// <summary>
@@ -30,23 +46,14 @@ namespace IFS.Transport
         {
             AttachInterface(iface);
             _callback = callback;
-        }
 
-        public static List<EthernetInterface> EnumerateDevices()
-        {            
-            List<EthernetInterface> interfaces = new List<EthernetInterface>();
-
-            foreach(LivePacketDevice device in LivePacketDevice.AllLocalMachine)
-            {
-                interfaces.Add(new EthernetInterface(device.Name, device.Description));
-            }
-
-            return interfaces;
+            Open(false, int.MaxValue);
+            BeginReceive();
         }
 
         public void Open(bool promiscuous, int timeout)
         {
-            _communicator = _interface.Open(0xffff, promiscuous ? PacketDeviceOpenAttributes.Promiscuous : PacketDeviceOpenAttributes.None, timeout);
+            _communicator = _interface.Open(0xffff, promiscuous ? PacketDeviceOpenAttributes.Promiscuous : PacketDeviceOpenAttributes.None, timeout);            
         }
 
         /// <summary>
@@ -57,9 +64,19 @@ namespace IFS.Transport
             _communicator.ReceivePackets(-1, ReceiveCallback);
         }
 
+        public void SendPacket(Packet p)
+        {
+            _communicator.SendPacket(p);
+        }
+
+        public object GetDeviceAddress()
+        {
+            return (object)_interface.GetMacAddress();
+        }
+
         private void ReceiveCallback(Packet p)
-        {                        
-            _callback(p);
+        {            
+            _callback(p);            
         }
 
         private void AttachInterface(EthernetInterface iface)
@@ -69,7 +86,7 @@ namespace IFS.Transport
             // Find the specified device by name
             foreach (LivePacketDevice device in LivePacketDevice.AllLocalMachine)
             {
-                if (device.Name == iface.Name)
+                if (device.Name == iface.Name && device.GetMacAddress() == iface.MacAddress)
                 {
                     _interface = device;
                     break;

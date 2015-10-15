@@ -1,4 +1,5 @@
-﻿using System;
+﻿using PcapDotNet.Packets;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -10,7 +11,10 @@ namespace IFS.Transport
     /// PacketInterface provides an abstraction over a transport (Ethernet, IP, Carrier Pigeon)
     /// which can provide raw packets.
     /// </summary>
-    interface IPacketInterface
+    public interface IPacketInterface
     {
+        void SendPacket(Packet p);
+
+        object GetDeviceAddress();
     }
 }

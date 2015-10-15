@@ -25,7 +25,7 @@ namespace IFS
 
             _inputWriteEvent = new AutoResetEvent(false);
 
-            _inputQueue = new MemoryStream(65536);
+            _inputQueue = new Queue<byte>(65536);
 
             // TODO: init IDs, etc. based on RFC PUP
             _start_pos = _recv_pos = _send_pos = rfcPup.ID;
@@ -161,13 +161,15 @@ namespace IFS
             _outputAckEvent.Set();
         }
 
+        /*
         public void Mark(byte type);
         public void Interrupt();
 
         public void Abort(int code, string message);
         public void Error(int code, string message);
 
-        public void End();
+        public void End(); 
+        */
 
         // TODO:
         // Events for:
@@ -235,10 +237,11 @@ namespace IFS
                 case PupType.RFC:
                     {
                         BSPChannel newChannel = new BSPChannel(p);
-                        _activeChannels.Add(newChannel.ClientPort.Socket);
+                        _activeChannels.Add(newChannel.ClientPort.Socket, newChannel);
 
                         return newChannel;
                     }
+                    break;
 
                 case PupType.Data:
                 case PupType.AData:
@@ -253,11 +256,13 @@ namespace IFS
                     break;
 
                 case PupType.Ack:
-                    BSPChannel channel = FindChannelForPup(p);
+                    {
+                        BSPChannel channel = FindChannelForPup(p);
 
-                    if (channel != null)
-                    {                        
-                        channel.Ack(p);
+                        if (channel != null)
+                        {
+                            channel.Ack(p);
+                        }
                     }
                     break;
 
@@ -267,7 +272,7 @@ namespace IFS
 
                         if (channel != null)
                         {
-                            channel.EndReply();
+                            //channel.EndReply();
                         }
                     }
                     break;

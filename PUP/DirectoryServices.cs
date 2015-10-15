@@ -33,6 +33,18 @@ namespace IFS
             _localHost = new HostAddress(1, 34);
         }
 
+        public string AddressLookup(HostAddress address)
+        {
+            // TODO: actually look things up
+            return "Alto";
+        }
+
+        public HostAddress NameLookup(string hostName)
+        {
+            // TODO: actually look things up
+            return new HostAddress(1, 0x80);
+        }
+
         public static DirectoryServices Instance
         {
             get { return _instance; }
