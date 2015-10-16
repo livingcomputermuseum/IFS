@@ -7,14 +7,17 @@ using System.Threading.Tasks;
 
 namespace IFS.Transport
 {
-    /// <summary>
-    /// PacketInterface provides an abstraction over a transport (Ethernet, IP, Carrier Pigeon)
-    /// which can provide raw packets.
-    /// </summary>
-    public interface IPacketInterface
-    {
-        void SendPacket(Packet p);
 
-        object GetDeviceAddress();
+    public delegate void HandlePup(PUP pup);
+
+    /// <summary>
+    /// IPupPacketInterface provides an abstraction over a transport (Ethernet, IP, Carrier Pigeon)
+    /// which can provide encapsulation for PUPs.
+    /// </summary>
+    public interface IPupPacketInterface
+    {
+        void Send(PUP p);
+
+        void RegisterReceiveCallback(HandlePup callback);
     }
 }

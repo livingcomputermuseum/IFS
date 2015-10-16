@@ -18,7 +18,7 @@ namespace IFS
 
     public class BSPChannel
     {
-        public BSPChannel(PUP rfcPup)
+        public BSPChannel(PUP rfcPup, UInt32 socketID)
         {
             _inputLock = new ReaderWriterLockSlim();
             _outputLock = new ReaderWriterLockSlim();
@@ -30,6 +30,13 @@ namespace IFS
             // TODO: init IDs, etc. based on RFC PUP
             _start_pos = _recv_pos = _send_pos = rfcPup.ID;
 
+            // Set up socket addresses.
+            // The client sends the connection port it prefers to use
+            // in the RFC pup.
+            _clientConnectionPort = new PUPPort(rfcPup.Contents, 0);
+
+            // We create our connection port using a unique socket address.
+            _serverConnectionPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, socketID);            
         }
 
         public PUPPort ClientPort
@@ -152,6 +159,10 @@ namespace IFS
 
         }
 
+        /// <summary>
+        /// Invoked when the client sends an ACK
+        /// </summary>
+        /// <param name="ackPUP"></param>
         public void Ack(PUP ackPUP)
         {
             // Update receiving end stats (max PUPs, etc.)
@@ -216,7 +227,14 @@ namespace IFS
     {
         static BSPManager()
         {
-
+            //
+            // Initialize the socket ID counter; we start with a
+            // number beyond the range of well-defined sockets.
+            // For each new BSP channel that gets opened, we will
+            // increment this counter to ensure that each channel gets
+            // a unique ID.  (Well, until we wrap around...)
+            //
+            _nextSocketID = _startingSocketID;
         }
 
 
@@ -235,9 +253,14 @@ namespace IFS
             switch (type)
             {
                 case PupType.RFC:
-                    {
-                        BSPChannel newChannel = new BSPChannel(p);
-                        _activeChannels.Add(newChannel.ClientPort.Socket, newChannel);
+                    {                        
+                        BSPChannel newChannel = new BSPChannel(p, GetNextSocketID());
+                        _activeChannels.Add(newChannel.ServerPort.Socket, newChannel);
+
+                        // Send RFC response to complete the rendezvous.
+                        PUP rfcResponse = new PUP(PupType.RFC, p.ID, newChannel.ClientPort, newChannel.ServerPort, newChannel.ServerPort.ToArray());
+
+                        Dispatcher.Instance.SendPup(rfcResponse);
 
                         return newChannel;
                     }
@@ -301,6 +324,33 @@ namespace IFS
             return null;
         }
 
+        private static UInt32 GetNextSocketID()
+        {
+            UInt32 next = _nextSocketID;
+
+            _nextSocketID++;
+
+            //
+            // Handle the wrap around case (which we're very unlikely to
+            // ever hit, but why not do the right thing).
+            // Start over at the initial ID.  This is very unlikely to
+            // collide with any pending channels.
+            //
+            if(_nextSocketID < _startingSocketID)
+            {
+                _nextSocketID = _startingSocketID;
+            }
+
+            return next;
+        }
+
+
+        /// <summary>
+        /// Map from socket address to BSP channel
+        /// </summary>
         private static Dictionary<UInt32, BSPChannel> _activeChannels;
+
+        private static UInt32 _nextSocketID;
+        private static readonly UInt32 _startingSocketID = 0x1000;
     }
 }
