@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -19,7 +20,7 @@ namespace IFS
                 throw new InvalidOperationException("Max length for a BCPL string is 255 characters.");
             }
             
-            _string = new byte[_string.Length];
+            _string = new byte[s.Length];
 
             // We simply take the low 8-bits of each Unicode character and stuff it into the
             // byte array.  This works fine for the ASCII subset of Unicode but obviously
@@ -51,6 +52,45 @@ namespace IFS
 
             _string = new byte[rawData.Length - 1];
             Array.Copy(rawData, 1, _string, 0, rawData.Length - 1);
+        }
+
+        /// <summary>
+        /// Build a new BCPL string from the raw representation at the given position in the array
+        /// </summary>
+        /// <param name="rawData"></param>
+        public BCPLString(byte[] rawData, int offset)
+        {            
+            int length = rawData[offset];
+
+            // Sanity check that BCPL length fits within specified array
+            if (length > rawData.Length - offset)
+            {
+                throw new InvalidOperationException("BCPL length data is invalid.");
+            }
+
+            _string = new byte[length];
+            Array.Copy(rawData, offset + 1, _string, 0, length);
+        }
+
+        public BCPLString(BSPChannel channel)
+        {
+            byte length = channel.ReadByte();
+            _string = new byte[length];
+
+            channel.Read(ref _string, length);
+        }
+
+        public BCPLString(Stream s)
+        {
+            byte length = (byte)s.ReadByte();
+            _string = new byte[length];
+
+            s.Read(_string, 0, length);
+        }
+
+        public int Length
+        {
+            get { return _string.Length; }
         }
 
         /// <summary>

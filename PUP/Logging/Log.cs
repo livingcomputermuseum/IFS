@@ -16,7 +16,9 @@ namespace IFS.Logging
         DroppedPacket = 8,
         InvalidPacket = 0x10,
         UnhandledProtocol = 0x20,
-        DuplicateHostNumber = 0x40,
+        HandledProtocol = 0x40,
+        DuplicateHostNumber = 0x80,
+        BSPLostPacket = 0x100,
 
         All = 0x7fffffff,
     }
@@ -25,7 +27,7 @@ namespace IFS.Logging
     {
         static Log()
         {
-            _level = LogLevel.None;
+            _level = LogLevel.All;
         }
 
         public static LogLevel Level

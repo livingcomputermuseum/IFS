@@ -45,11 +45,25 @@ namespace IFS
         DirectoryLookupErrorReply = 146,
         AddressLookupRequest = 147,
         AddressLookupResponse = 148,
+
+        // Where is User
+        WhereIsUserRequest = 152,
+        WhereIsUserResponse = 153,
+        WhereIsUserErrorReply = 154,
         
         // Alto Boot
         SendBootFileRequest = 164,
         BootDirectoryRequest = 165,
         BootDirectoryReply = 166,
+
+        // User authentication
+        AuthenticateRequest = 168,
+        AuthenticatePositiveResponse = 169,
+        AuthenticateNegativeResponse = 170,
+
+        // Gateway Information Protocol
+        GatewayInformationRequest = 128,
+        GatewayInformationResponse = 129
     }
 
     public struct PUPPort
@@ -87,8 +101,8 @@ namespace IFS
         public PUPPort(byte[] rawData, int offset)
         {
             Network = rawData[offset];
-            Host = rawData[offset + 1];
-            Socket = Helpers.ReadUInt(rawData, 2);
+            Host = rawData[offset + 1];            
+            Socket = Helpers.ReadUInt(rawData, offset + 2);
         }
 
         /// <summary>
@@ -99,7 +113,7 @@ namespace IFS
         public void WriteToArray(ref byte[] rawData, int offset)
         {
             rawData[offset] = Network;
-            rawData[offset + 1] = Host;
+            rawData[offset + 1] = Host;            
             Helpers.WriteUInt(ref rawData, Socket, offset + 2);
         }
 
@@ -124,8 +138,18 @@ namespace IFS
         /// <summary>
         /// Construct a new packet from the supplied data.
         /// </summary>
-        /// <param name="rawPacket"></param>
-        public PUP(PupType type, UInt32 id, PUPPort destination, PUPPort source, byte[] contents)
+        /// <param name="contentsContainsGarbageByte">
+        /// True if the "contents" array contains a garbage (padding) byte that should NOT
+        /// be factored into the Length field of the PUP.  This is necessary so we can properly
+        /// support the Echo protocol; since some PUP tests that check validation require that the
+        /// PUP be echoed in its entirety (including the supposedly-ignorable "garbage" byte on
+        /// odd-length PUPs) we need to be able to craft a PUP with one extra byte of content that's
+        /// otherwise ignored...
+        /// 
+        /// TODO: Update to use Serialization code rather than packing bytes by hand.
+        /// </param>
+        /// 
+        public PUP(PupType type, UInt32 id, PUPPort destination, PUPPort source, byte[] contents, bool contentsContainsGarbageByte)
         {
             _rawData = null;
 
@@ -136,28 +160,66 @@ namespace IFS
                 throw new InvalidOperationException("PUP size must not exceed 532 bytes.");
             }
 
+            //
+            // Sanity check:
+            // "contentsContainGarbageByte" can ONLY be true if "contents" is of even length
+            //
+            if (contentsContainsGarbageByte && (contents.Length % 2) != 0)
+            {
+                throw new InvalidOperationException("Odd content length with garbage byte specified.");
+            }
+
             TransportControl = 0;
             Type = type;
             ID = id;
             DestinationPort = destination;
             SourcePort = source;
-            Contents = contents;
-            Length = (ushort)(PUP_HEADER_SIZE + PUP_CHECKSUM_SIZE + contents.Length);
+
+            // Ensure contents are an even number of bytes.
+            int contentLength = (contents.Length % 2) == 0 ? contents.Length : contents.Length + 1;
+            Contents = new byte[contentLength];
+            contents.CopyTo(Contents, 0);
+
+            Length = (ushort)(PUP_HEADER_SIZE + PUP_CHECKSUM_SIZE + contentLength);            
 
             // Stuff data into raw array
             _rawData = new byte[Length];
+
+            //
+            // Subtract off one byte from the Length value if the contents contain a garbage byte.
+            // (See header comments for function)
+            if (contentsContainsGarbageByte)
+            {
+                Length--;
+            }
+
             Helpers.WriteUShort(ref _rawData, Length, 0);
             _rawData[2] = TransportControl;
-            _rawData[3] = (byte)Type;
+            _rawData[3] = (byte)Type;            
             Helpers.WriteUInt(ref _rawData, ID, 4);
             DestinationPort.WriteToArray(ref _rawData, 8);
             SourcePort.WriteToArray(ref _rawData, 14);
-            Array.Copy(Contents, 0, _rawData, 20, Contents.Length);
+            Array.Copy(Contents, 0, _rawData, 20, contentLength);
 
             // Calculate the checksum and stow it
             Checksum = CalculateChecksum();
-            Helpers.WriteUShort(ref _rawData, Checksum, Length - 2);
+            Helpers.WriteUShort(ref _rawData, Checksum, _rawData.Length - 2);
         }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="type"></param>
+        /// <param name="id"></param>
+        /// <param name="destination"></param>
+        /// <param name="source"></param>
+        /// <param name="contents"></param>
+        public PUP(PupType type, UInt32 id, PUPPort destination, PUPPort source, byte[] contents) :
+            this(type, id, destination, source, contents, false)
+        {
+            
+        }
+
 
         /// <summary>
         /// Same as above, but with no content (i.e. a zero-byte payload)
@@ -176,34 +238,47 @@ namespace IFS
         /// Load in an existing packet from a stream
         /// </summary>
         /// <param name="stream"></param>
-        public PUP(MemoryStream stream)
+        public PUP(MemoryStream stream, int length)
         {
-            _rawData = new byte[stream.Length];
-            stream.Read(_rawData, 0, (int)stream.Length);
+            _rawData = new byte[length];
+            stream.Read(_rawData, 0, length);
 
             // Read fields in.  TODO: investigate more efficient ways to do this.
             Length = Helpers.ReadUShort(_rawData, 0);
 
             // Sanity check size:
-            if (Length > stream.Length)
+            if (Length > length)
             {
                 throw new InvalidOperationException("Length field in PUP is invalid.");
-            }
+            }            
 
             TransportControl = _rawData[2];
-            Type = (PupType)_rawData[3];
+            Type = (PupType)_rawData[3];            
             ID = Helpers.ReadUInt(_rawData, 4);
             DestinationPort = new PUPPort(_rawData, 8);
             SourcePort = new PUPPort(_rawData, 14);
-            Array.Copy(_rawData, 20, Contents, 0, Length - PUP_HEADER_SIZE - PUP_CHECKSUM_SIZE);
-            Checksum = Helpers.ReadUShort(_rawData, Length - 2);
+
+            int contentLength = Length - PUP_HEADER_SIZE - PUP_CHECKSUM_SIZE;
+            Contents = new byte[contentLength];
+            Array.Copy(_rawData, 20, Contents, 0, contentLength);
+
+            // Length is the number of valid bytes in the PUP, which may be an odd number.
+            // There are always an even number of bytes in the PUP, and the checksum
+            // therefore begins on an even byte boundary.  Calculate the checksum offset
+            // appropriately.  (Empirically, we could also just use the last word of the packet,
+            // as the Alto PUP implementation never appears to pad any extra data after the PUP, but
+            // this doesn't appear to be a requirement and I don't want to rely on it.)
+            int checksumOffset = (Length % 2) == 0 ? Length - PUP_CHECKSUM_SIZE : Length - PUP_CHECKSUM_SIZE + 1;
+
+            Checksum = Helpers.ReadUShort(_rawData, checksumOffset);
 
             // Validate checksum
             ushort cChecksum = CalculateChecksum();
 
-            if (cChecksum != Checksum)
+            if (Checksum != 0xffff && cChecksum != Checksum)
             {
-                throw new InvalidOperationException(String.Format("PUP checksum is invalid. ({0} vs {1}", Checksum, cChecksum));
+                // TODO: determine what to do with packets that are corrupted.
+                Logging.Log.Write(Logging.LogLevel.Warning, String.Format("PUP checksum is invalid. (got {0:x}, expected {1:x})", Checksum, cChecksum));
             }
 
         }
@@ -215,59 +290,36 @@ namespace IFS
 
         private ushort CalculateChecksum()
         {
+            uint sum = 0;
 
-            int i;
-
-            //
-            // This code "borrowed" from the Stanford PUP code
-            // and translated roughly to C#
-            //
-            Cksum cksm;
-
-            cksm.lcksm = 0;
-            cksm.scksm.ccksm = 0;       // to make the C# compiler happy since it knows not of unions
-            cksm.scksm.cksm = 0;
-
-            for (i = 0; i < _rawData.Length - PUP_CHECKSUM_SIZE; i += 2)
+            // Sum over everything except the checksum word
+            for (int i=0; i< _rawData.Length - PUP_CHECKSUM_SIZE; i+=2)
             {
-                ushort word = Helpers.ReadUShort(_rawData, i);
+                ushort nextWord = Helpers.ReadUShort(_rawData, i);
+                //ushort nextWord = (ushort)((_rawData[i + 1] << 8) | _rawData[i]);
 
-                cksm.lcksm += word;
-                cksm.scksm.cksm += cksm.scksm.ccksm;
-                cksm.scksm.ccksm = 0;
-                cksm.lcksm <<= 1;
-                cksm.scksm.cksm += cksm.scksm.ccksm;
-                cksm.scksm.ccksm = 0;
+                // 2's complement add with "end-around" carry results in
+                // 1's complement add
+                sum += nextWord;
+
+                uint carry = (sum & 0x10000) >> 16;
+                sum = (ushort)(sum + carry);
+
+                // Rotate left
+                sum = sum << 1;
+                carry = (sum & 0x10000) >> 16;
+                sum = (ushort)(sum + carry);                
             }
 
-            if (cksm.scksm.cksm == 0xffff)
+            // Negative 0? convert to positive 0.
+            if (sum == 0xffff)
             {
-                cksm.scksm.cksm = 0;
+                sum = 0;
             }
 
-           return cksm.scksm.cksm;             
-        }
 
-        // Structs used by CalculateChecksum to simulate
-        // a C union in C#
-        [StructLayout(LayoutKind.Explicit)]
-        struct Scksum
-        {
-            [FieldOffset(0)]
-            public ushort ccksm;
-            [FieldOffset(2)]
-            public ushort cksm;
-        }
-
-        [StructLayout(LayoutKind.Explicit)]
-        struct Cksum
-        {
-            [FieldOffset(0)]
-            public ulong lcksm;
-
-            [FieldOffset(0)]
-            public Scksum scksm;
-        }
+            return (ushort)sum;
+        }        
 
         public readonly ushort Length;
         public readonly byte TransportControl;
@@ -294,9 +346,19 @@ namespace IFS
             return (ushort)((data[offset] << 8) | data[offset + 1]);
         }
 
+        public static ushort ReadUShort(Stream s)
+        {
+            return (ushort)((s.ReadByte() << 8) | s.ReadByte());
+        }
+
         public static UInt32 ReadUInt(byte[] data, int offset)
         {
             return (UInt32)((data[offset] << 24) | (data[offset + 1] << 16) | (data[offset + 2] << 8) | data[offset + 3]);
+        }
+
+        public static UInt32 ReadUInt(Stream s)
+        {
+            return (UInt32)((s.ReadByte() << 24) | (s.ReadByte() << 16) | (s.ReadByte() << 8) | s.ReadByte());
         }
 
         public static void WriteUShort(ref byte[] data, ushort s, int offset)
@@ -305,12 +367,55 @@ namespace IFS
             data[offset + 1] = (byte)s;
         }
 
+        public static void WriteUShort(Stream st, ushort s)
+        {
+            st.WriteByte((byte)(s >> 8));
+            st.WriteByte((byte)s);            
+        }
+
         public static void WriteUInt(ref byte[] data, UInt32 s, int offset)
         {
             data[offset] = (byte)(s >> 24);
             data[offset + 1] = (byte)(s >> 16);
             data[offset + 2] = (byte)(s >> 8);
             data[offset + 3] = (byte)s;
-        }        
+        }
+
+        public static void WriteUInt(Stream st, UInt32 s)
+        {
+            st.WriteByte((byte)(s >> 24));
+            st.WriteByte((byte)(s >> 16));
+            st.WriteByte((byte)(s >> 8));
+            st.WriteByte((byte)s);
+        }
+
+        public static byte[] StringToArray(string s)
+        {
+            byte[] stringArray = new byte[s.Length];
+
+            // We simply take the low 8-bits of each Unicode character and stuff it into the
+            // byte array.  This works fine for the ASCII subset of Unicode but obviously
+            // is bad for everything else.  This is unlikely to be an issue given the lack of
+            // any real internationalization support on the IFS end of things, but might be
+            // something to look at.
+            for (int i = 0; i < stringArray.Length; i++)
+            {
+                stringArray[i] = (byte)s[i];
+            }
+
+            return stringArray;
+        }
+
+        public static string ArrayToString(byte[] a)
+        {
+            StringBuilder sb = new StringBuilder(a.Length);
+
+            for (int i = 0; i < a.Length; i++)
+            {
+                sb.Append((char)(a[i]));
+            }
+
+            return sb.ToString();
+        }
     }
 }

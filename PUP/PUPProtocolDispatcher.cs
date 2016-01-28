@@ -13,12 +13,12 @@ namespace IFS
     /// <summary>
     /// Dispatches incoming PUPs to the right protocol handler; sends outgoing PUPs over the network.
     /// </summary>
-    public class Dispatcher
+    public class PUPProtocolDispatcher
     {
         /// <summary>
         /// Private Constructor for this class, enforcing Singleton usage.
         /// </summary>
-        private Dispatcher()
+        private PUPProtocolDispatcher()
         {
             _dispatchMap = new Dictionary<uint, PUPProtocolEntry>();           
         }
@@ -26,7 +26,7 @@ namespace IFS
         /// <summary>
         /// Accessor for singleton instance of this class.
         /// </summary>
-        public static Dispatcher Instance
+        public static PUPProtocolDispatcher Instance
         {
             get { return _instance; }
         }
@@ -62,14 +62,33 @@ namespace IFS
         }
 
         private void OnPupReceived(PUP pup)
-        {      
+        {
             //      
             // Forward PUP on to registered endpoints.
             //                                    
             if (_dispatchMap.ContainsKey(pup.DestinationPort.Socket))
             {
                 PUPProtocolEntry entry = _dispatchMap[pup.DestinationPort.Socket];
-                entry.ProtocolImplementation.RecvData(pup);
+
+                if (entry.ConnectionType == ConnectionType.Connectionless)
+                {
+                    Log.Write(LogLevel.HandledProtocol, String.Format("Dispatching PUP to {0} handler.", entry.FriendlyName));
+                    // Connectionless; just pass the PUP directly to the protocol
+                    entry.ProtocolImplementation.RecvData(pup);
+                }
+                else
+                {
+                    // RTP / BSP protocol.  Pass this to the BSP handler to set up a channel.
+                    Log.Write(LogLevel.HandledProtocol, String.Format("Dispatching PUP to BSP protocol for {0}.", entry.FriendlyName));
+                    //entry.ProtocolImplementation.RecvData(pup);
+
+                    BSPManager.EstablishRendezvous(pup, (BSPProtocol)entry.ProtocolImplementation);
+                }
+            }
+            else if (BSPManager.ChannelExistsForSocket(pup))
+            {
+                // An established BSP channel, send data to it.
+                BSPManager.RecvData(pup);
             }
             else
             {
@@ -88,6 +107,6 @@ namespace IFS
         /// </summary>
         private Dictionary<UInt32, PUPProtocolEntry> _dispatchMap;
 
-        private static Dispatcher _instance = new Dispatcher();
+        private static PUPProtocolDispatcher _instance = new PUPProtocolDispatcher();
     }
 }

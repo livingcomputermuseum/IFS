@@ -7,6 +7,35 @@ using System.Threading.Tasks;
 
 namespace IFS
 {
+    //
+    // From the spec, the AltoTime response is:
+    // "10 bytes in all, organized as 5 16-bit words:
+    //    words 0, 1    Present date and time: a 32-bit integer representing number of
+    //                  seconds since midnight, January 1, 1901, Greenwich Mean Time (GMT).
+    //    
+    //    word 2        Local time zone information.  Bit 0 is zero if west of Greenwich
+    //                  and one if east.  Bits 1-7 are the number of hours east or west of
+    //                  Greenwich.  Bits 8-15 are an additional number of minutes.
+    // 
+    //    word 3        Day of the year on or before which Daylight Savings Time takes
+    //                  effect locally, where 1 = January 1 and 366 = Dcember 31.  (The
+    //                  actual day is the next preceding Sunday.)
+    //
+    //    word 4        Day of the year on or before which Daylight Savings Time ends.  If
+    //                  Daylight Savings Time is not observed locally, both the start and
+    //                  end dates should be 366.
+    //
+    //    The local time parameters in words 2 and 4 are those in effect at the server's 
+    //    location.
+    //            
+    struct AltoTime
+    {
+        public uint DateTime;
+        public ushort TimeZone;
+        public ushort DSTStart;
+        public ushort DSTEnd;
+    }
+
     /// <summary>
     /// Implements PUP Miscellaneous Services (see miscSvcsProto.pdf)
     /// which include:
@@ -30,6 +59,7 @@ namespace IFS
         /// <param name="p"></param>
         public override void RecvData(PUP p)
         {
+            Log.Write(LogLevel.HandledProtocol, String.Format("Misc. protocol request is for {0}.", p.Type));
             switch (p.Type)
             {
                 case PupType.StringTimeRequest:
@@ -46,7 +76,7 @@ namespace IFS
 
                 case PupType.NameLookupRequest:
                     SendNameLookupReply(p);
-                    break;
+                    break;                
 
                 default:
                     Log.Write(LogLevel.UnhandledProtocol, String.Format("Unhandled misc. protocol {0}", p.Type));
@@ -61,67 +91,66 @@ namespace IFS
             // From the spec, the response is:
             // "A string consisting of the current date and time in the form
             // '11-SEP-75 15:44:25'"
+            // NOTE: This is *not* a BCPL string, just the raw characters.
             //
             // It makes no mention of timezone or DST, so I am assuming local time here.
             // Good enough for government work.
             //
-            DateTime currentTime = DateTime.Now;            
+            DateTime currentTime = DateTime.Now;
 
-            BCPLString bcplDateString = new BCPLString(currentTime.ToString("dd-MMM-yy HH:mm:ss"));
+            byte[] timeString = Helpers.StringToArray(currentTime.ToString("dd-MMM-yy HH:mm:ss"));            
             
             PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.SourcePort.Socket);
-            PUP response = new PUP(PupType.StringTimeReply, p.ID, p.SourcePort, localPort, bcplDateString.ToArray());
+            PUP response = new PUP(PupType.StringTimeReply, p.ID, p.SourcePort, localPort, timeString);
 
-            Dispatcher.Instance.SendPup(response);
+            PUPProtocolDispatcher.Instance.SendPup(response);
         }
 
         private void SendAltoTimeReply(PUP p)
         {
-            //
-            // From the spec, the response is:
-            // "10 bytes in all, organized as 5 16-bit words:
-            //    words 0, 1    Present date and time: a 32-bit integer representing number of
-            //                  seconds since midnight, January 1, 1901, Greenwich Mean Time (GMT).
-            //    
-            //    word 2        Local time zone information.  Bit 0 is zero if west of Greenwich
-            //                  and one if east.  Bits 1-7 are the number of hours east or west of
-            //                  Greenwich.  Bits 8-15 are an additional number of minutes.
-            // 
-            //    word 3        Day of the year on or before which Daylight Savings Time takes
-            //                  effect locally, where 1 = January 1 and 366 = Dcember 31.  (The
-            //                  actual day is the next preceding Sunday.)
-            //
-            //    word 4        Day of the year on or before which Daylight Savings Time ends.  If
-            //                  Daylight Savings Time is not observed locally, both the start and
-            //                  end dates should be 366.
-            //
-            //    The local time parameters in words 2 and 4 are those in effect at the server's 
-            //    location.
-            //
+            
 
             // So the Alto epoch is 1/1/1901.  For the time being to keep things simple we're assuming
             // GMT and no DST at all.  TODO: make this take into account our TZ, etc.
             //
-            DateTime currentTime = DateTime.Now;
+            // Additionally:  While certain routines seem to be Y2K compliant (the time requests made from
+            // the Alto's "puptest" diagnostic, for example), the Executive is not.  To keep things happy,
+            // we move things back 28 years so that the calendar at least matches up.
+            //
+            DateTime currentTime =
+                new DateTime(
+                    DateTime.Now.Year - 28,
+                    DateTime.Now.Month,
+                    DateTime.Now.Day,
+                    DateTime.Now.Hour,
+                    DateTime.Now.Minute,
+                    DateTime.Now.Second);
 
             // The epoch for .NET is 1/1/0001 at 12 midnight and is counted in 100-ns intervals.
-            // Some conversion is needed, is what I'm saying.
-            DateTime altoEpoch = new DateTime(1901, 1, 1);
+            // Some conversion is needed, is what I'm saying.            
+            DateTime altoEpoch = new DateTime(1901, 1, 1);            
+                        
             TimeSpan timeSinceAltoEpoch = new TimeSpan(currentTime.Ticks - altoEpoch.Ticks);
 
             UInt32 altoTime = (UInt32)timeSinceAltoEpoch.TotalSeconds;
 
+
+
             // Build the response data
-            byte[] data = new byte[10];
-            Helpers.WriteUInt(ref data, altoTime, 0);
-            Helpers.WriteUShort(ref data, 0, 4);        // Timezone, hardcoded to GMT
-            Helpers.WriteUShort(ref data, 366, 6);      // DST info, not used right now.
-            Helpers.WriteUShort(ref data, 366, 8);
+            AltoTime time = new AltoTime();
+            time.DateTime = altoTime;
+            time.TimeZone = 0;      // Hardcoded to GMT
+            time.DSTStart = 366;    // DST not specified yet
+            time.DSTEnd = 366;            
 
-            PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.SourcePort.Socket);
-            PUP response = new PUP(PupType.AltoTimeResponse, p.ID, p.SourcePort, localPort, data);
+            PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress,  p.DestinationPort.Socket);
 
-            Dispatcher.Instance.SendPup(response);
+            // Response must contain our network number; this is used to tell clients what network they're on if they don't already know.
+            PUPPort remotePort = new PUPPort(DirectoryServices.Instance.LocalNetwork, p.SourcePort.Host, p.SourcePort.Socket);
+
+            PUP response = new PUP(PupType.AltoTimeResponse, p.ID, remotePort, localPort, Serializer.Serialize(time));
+
+            PUPProtocolDispatcher.Instance.SendPup(response);
         }
 
         private void SendAddressLookupReply(PUP p)
@@ -150,20 +179,22 @@ namespace IFS
             if (!String.IsNullOrEmpty(hostName))
             {
                 // We have a result, pack the name into the response.
-                BCPLString interNetworkName = new BCPLString(hostName);
+                // NOTE: This is *not* a BCPL string, just the raw characters.
+                byte[] interNetworkName = Helpers.StringToArray(hostName);
+                
                 PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.SourcePort.Socket);
-                PUP lookupReply = new PUP(PupType.AddressLookupResponse, p.ID, p.SourcePort, localPort, interNetworkName.ToArray());
+                PUP lookupReply = new PUP(PupType.AddressLookupResponse, p.ID, p.SourcePort, localPort, interNetworkName);
 
-                Dispatcher.Instance.SendPup(lookupReply);
+                PUPProtocolDispatcher.Instance.SendPup(lookupReply);
             }
             else
             {
                 // Unknown host, send an error reply
-                BCPLString errorString = new BCPLString("Unknown host for address.");
+                string errorString = "Unknown host.";
                 PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.SourcePort.Socket);
-                PUP errorReply = new PUP(PupType.DirectoryLookupErrorReply, p.ID, p.SourcePort, localPort, errorString.ToArray());
+                PUP errorReply = new PUP(PupType.DirectoryLookupErrorReply, p.ID, p.SourcePort, localPort, Helpers.StringToArray(errorString));
 
-                Dispatcher.Instance.SendPup(errorReply);
+                PUPProtocolDispatcher.Instance.SendPup(errorReply);
             }
         }
 
@@ -171,7 +202,8 @@ namespace IFS
         {
             //
             // For the request PUP:
-            //  A string consisting of an inter-network name expression
+            //  A string consisting of an inter-network name expression.      
+            //  NOTE: This is *not* a BCPL string, just the raw characters.      
             //
             // Response:
             //  One or more 6-byte blocks containing the address(es) corresponding to the
@@ -180,13 +212,11 @@ namespace IFS
             //
 
             //
-            // I'm not sure what would cause a name to resolve to multiple addresses at this time.
-            // Also still not sure what an 'inter-network name expression' is.
-            // As above, assuming this is a simple hostname.
+            // For now, the assumption is that each name maps to at most one address.
             //
-            BCPLString lookupName = new BCPLString(p.Contents);
+            string lookupName = Helpers.ArrayToString(p.Contents);
 
-            HostAddress address = DirectoryServices.Instance.NameLookup(lookupName.ToString());
+            HostAddress address = DirectoryServices.Instance.NameLookup(lookupName);
 
             if (address != null)
             {
@@ -195,16 +225,16 @@ namespace IFS
                 PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.SourcePort.Socket);
                 PUP lookupReply = new PUP(PupType.NameLookupResponse, p.ID, p.SourcePort, localPort, lookupPort.ToArray());
 
-                Dispatcher.Instance.SendPup(lookupReply);
+                PUPProtocolDispatcher.Instance.SendPup(lookupReply);
             }
             else
             {
                 // Unknown host, send an error reply
-                BCPLString errorString = new BCPLString("Unknown host for name.");
+                string errorString = "Unknown host.";
                 PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.SourcePort.Socket);
-                PUP errorReply = new PUP(PupType.DirectoryLookupErrorReply, p.ID, p.SourcePort, localPort, errorString.ToArray());
+                PUP errorReply = new PUP(PupType.DirectoryLookupErrorReply, p.ID, p.SourcePort, localPort, Helpers.StringToArray(errorString));
 
-                Dispatcher.Instance.SendPup(errorReply);
+                PUPProtocolDispatcher.Instance.SendPup(errorReply);
             }
         }
     }

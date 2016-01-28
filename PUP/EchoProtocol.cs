@@ -28,8 +28,29 @@ namespace IFS
                 // Just send it back with the source/destination swapped.
                 PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.SourcePort.Socket);
 
-                PUP echoPup = new PUP(PupType.ImAnEcho, p.ID, p.SourcePort, localPort);
-                Dispatcher.Instance.SendPup(p);
+                //
+                // An annoyance:  The Alto "puptest" diagnostic actually expects us to echo *everything* back including
+                // the garbage byte on odd-length PUPs.  (Even though the garbage byte is meant to be ignored.)
+                // So in these cases we need to do extra work and copy in the garbage byte.  Grr.
+                //
+                byte[] contents;
+                bool garbageByte = (p.Contents.Length % 2) != 0;
+
+                if (!garbageByte)
+                {
+                    // Even, no work needed
+                    contents = p.Contents;
+                }
+                else
+                {
+                    // No such luck, copy in the extra garbage byte to make diagnostics happy.
+                    contents = new byte[p.Contents.Length + 1];
+                    p.Contents.CopyTo(contents, 0);
+                    contents[contents.Length - 1] = p.RawData[p.RawData.Length - 3];
+                }
+
+                PUP echoPup = new PUP(PupType.ImAnEcho, p.ID, p.SourcePort, localPort, contents, garbageByte);
+                PUPProtocolDispatcher.Instance.SendPup(echoPup);
             }
         }
 

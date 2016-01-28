@@ -10,6 +10,7 @@ using PcapDotNet.Core.Extensions;
 using PcapDotNet.Packets;
 using PcapDotNet.Packets.Ethernet;
 using IFS.Logging;
+using System.IO;
 
 namespace IFS.Transport
 {
@@ -73,19 +74,43 @@ namespace IFS.Transport
             //           
             if (_pupToEthernetMap.ContainsKey(p.DestinationPort.Host))
             {
-                MacAddress destinationMac = _pupToEthernetMap[p.SourcePort.Host];
+                // Build the outgoing data; this is:
+                // 1st word: length of data following
+                // 2nd word: 3mbit destination / source bytes
+                // 3rd word: frame type (PUP)
+                byte[] encapsulatedFrame = new byte[6 + p.RawData.Length];
+
+                // 3mbit Packet length
+                encapsulatedFrame[0] = (byte)((p.RawData.Length / 2 + 2) >> 8);
+                encapsulatedFrame[1] = (byte)(p.RawData.Length / 2 + 2);
+
+                // addressing
+                encapsulatedFrame[2] = p.DestinationPort.Host;
+                encapsulatedFrame[3] = p.SourcePort.Host;                                
+
+                // frame type
+                encapsulatedFrame[4] = (byte)(_pupFrameType >> 8);
+                encapsulatedFrame[5] = (byte)_pupFrameType;
+
+                // Actual data
+                p.RawData.CopyTo(encapsulatedFrame, 6);
+
+                // Byte swap
+                encapsulatedFrame = ByteSwap(encapsulatedFrame);
+
+                MacAddress destinationMac = _pupToEthernetMap[p.DestinationPort.Host];
 
                 // Build the outgoing packet; place the source/dest addresses, type field and the PUP data.                
                 EthernetLayer ethernetLayer = new EthernetLayer
                 {
                     Source = _interface.GetMacAddress(),
                     Destination = destinationMac,
-                    EtherType = (EthernetType)_pupFrameType,
-                };
+                    EtherType = (EthernetType)_3mbitFrameType,
+                };                
 
                 PayloadLayer payloadLayer = new PayloadLayer
                 {
-                    Data = new Datagram(p.RawData),
+                    Data = new Datagram(encapsulatedFrame),
                 };
 
                 PacketBuilder builder = new PacketBuilder(ethernetLayer, payloadLayer);
@@ -103,27 +128,47 @@ namespace IFS.Transport
         private void ReceiveCallback(Packet p)
         {
             //
-            // Filter out PUPs, forward them on.
+            // Filter out encapsulated 3mbit frames and look for PUPs, forward them on.
             //
-            if ((int)p.Ethernet.EtherType == _pupFrameType)
+            if ((int)p.Ethernet.EtherType == _3mbitFrameType)
             {
-                PUP pup = new PUP(p.Ethernet.Payload.ToMemoryStream());
+                MemoryStream packetStream = ByteSwap(p.Ethernet.Payload.ToMemoryStream());
 
-                //
-                // Check the network -- if this is not network zero (coming from a host that doesn't yet know what
-                // network it's on) or the network we're on, we will ignore it (for now).  Once we implement
-                // Gateway services we will handle these appropriately (at a higher, as-yet-unimplemented level between this
-                // and the Dispatcher).
-                //
-                if (pup.SourcePort.Network == 0 || pup.SourcePort.Network == DirectoryServices.Instance.LocalHostAddress.Network)
+                // Read the length prefix (in words), convert to bytes.
+                // Subtract off 2 words for the ethernet header
+                int length = ((packetStream.ReadByte() << 8) | (packetStream.ReadByte())) * 2  - 4;
+
+                // Read the address (1st word of 3mbit packet)
+                byte destination = (byte)packetStream.ReadByte();
+                byte source = (byte)packetStream.ReadByte();
+
+                // Read the type and switch on it
+                int etherType3mbit = ((packetStream.ReadByte() << 8) | (packetStream.ReadByte()));
+
+                if (etherType3mbit == _pupFrameType)
                 {
-                    UpdateMACTable(pup, p);
-                    _callback(pup);
+                    PUP pup = new PUP(packetStream, length);
+
+                    //
+                    // Check the network -- if this is not network zero (coming from a host that doesn't yet know what
+                    // network it's on, or specifying the current network) or the network we're on, we will ignore it (for now).  Once we implement
+                    // Gateway services we will handle these appropriately (at a higher, as-yet-unimplemented layer between this
+                    // and the Dispatcher).
+                    //
+                    if (pup.DestinationPort.Network == 0 || pup.DestinationPort.Network == DirectoryServices.Instance.LocalHostAddress.Network)
+                    {
+                        UpdateMACTable(pup, p);
+                        _callback(pup);
+                    }
+                    else
+                    {
+                        // Not for our network.
+                        Log.Write(LogLevel.DroppedPacket, String.Format("PUP is for network {0}, dropping.", pup.DestinationPort.Network));
+                    }
                 }
                 else
                 {
-                    // Not for our network.
-                    Log.Write(LogLevel.DroppedPacket, String.Format("PUP is for network {0}, dropping.", pup.SourcePort.Network));
+                    Log.Write(LogLevel.DroppedPacket, String.Format("3mbit packet is not a PUP, dropping"));
                 }
             }
             else
@@ -155,7 +200,12 @@ namespace IFS.Transport
 
         private void Open(bool promiscuous, int timeout)
         {
-            _communicator = _interface.Open(0xffff, promiscuous ? PacketDeviceOpenAttributes.Promiscuous : PacketDeviceOpenAttributes.None, timeout);
+            _communicator = _interface.Open(
+                0xffff, 
+                promiscuous ? PacketDeviceOpenAttributes.Promiscuous | PacketDeviceOpenAttributes.NoCaptureLocal: PacketDeviceOpenAttributes.NoCaptureLocal, 
+                timeout);
+
+            _communicator.SetKernelMinimumBytesToCopy(1);
         }
 
         /// <summary>
@@ -194,6 +244,36 @@ namespace IFS.Transport
             }
         }
 
+        private MemoryStream ByteSwap(MemoryStream input)
+        {
+            byte[] buffer = new byte[input.Length];
+
+            input.Read(buffer, 0, buffer.Length);
+
+            for(int i=0;i<buffer.Length;i+=2)
+            {
+                byte temp = buffer[i];
+                buffer[i] = buffer[i + 1];
+                buffer[i + 1] = temp;
+            }
+
+            input.Position = 0;            
+
+            return new MemoryStream(buffer);
+        }
+
+        private byte[] ByteSwap(byte[] input)
+        {                       
+            for (int i = 0; i < input.Length; i += 2)
+            {
+                byte temp = input[i];
+                input[i] = input[i + 1];
+                input[i + 1] = temp;
+            }
+
+            return input;
+        }
+
         /// <summary>
         /// PUP<->Ethernet address map
         /// </summary>
@@ -205,7 +285,12 @@ namespace IFS.Transport
         private HandlePup _callback;
 
         // Constants
-        private const ushort _pupFrameType = 512;
+
+        // The ethertype used in the encapsulated 3mbit frame
+        private readonly ushort _pupFrameType = 512;
+
+        // The type used for 3mbit frames encapsulated in 10mb frames
+        private readonly int _3mbitFrameType = 0xbeef;     // easy to identify, ostensibly unused by anything of any import
 
     }
 }

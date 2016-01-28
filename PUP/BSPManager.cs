@@ -1,4 +1,5 @@
-﻿using System;
+﻿using IFS.Logging;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -9,6 +10,10 @@ using System.Threading.Tasks;
 namespace IFS
 {
 
+    public abstract class BSPProtocol : PUPProtocolBase
+    {
+        public abstract void InitializeServerForChannel(BSPChannel channel);
+    }
 
     public enum BSPState
     {
@@ -18,7 +23,7 @@ namespace IFS
 
     public class BSPChannel
     {
-        public BSPChannel(PUP rfcPup, UInt32 socketID)
+        public BSPChannel(PUP rfcPup, UInt32 socketID, BSPProtocol protocolHandler)
         {
             _inputLock = new ReaderWriterLockSlim();
             _outputLock = new ReaderWriterLockSlim();
@@ -26,6 +31,10 @@ namespace IFS
             _inputWriteEvent = new AutoResetEvent(false);
 
             _inputQueue = new Queue<byte>(65536);
+
+            _outputAckEvent = new AutoResetEvent(false);
+
+            _protocolHandler = protocolHandler;
 
             // TODO: init IDs, etc. based on RFC PUP
             _start_pos = _recv_pos = _send_pos = rfcPup.ID;
@@ -35,10 +44,16 @@ namespace IFS
             // in the RFC pup.
             _clientConnectionPort = new PUPPort(rfcPup.Contents, 0);
 
+            // 
+            if (_clientConnectionPort.Network == 0)
+            {
+                _clientConnectionPort.Network = DirectoryServices.Instance.LocalNetwork;
+            }
+
             // We create our connection port using a unique socket address.
             _serverConnectionPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, socketID);            
         }
-
+       
         public PUPPort ClientPort
         {
             get { return _clientConnectionPort; }
@@ -49,11 +64,25 @@ namespace IFS
             get { return _serverConnectionPort; }
         }
 
+        public void Destroy()
+        {
+            
+        }
+
         /// <summary>
         /// Reads data from the channel (i.e. from the client).  Will block if not all the requested data is available.
         /// </summary>
         /// <returns></returns>
         public int Read(ref byte[] data, int count)
+        {
+            return Read(ref data, count, 0);
+        }
+
+        /// <summary>
+        /// Reads data from the channel (i.e. from the client).  Will block if not all the requested data is available.
+        /// </summary>
+        /// <returns></returns>
+        public int Read(ref byte[] data, int count, int offset)
         {            
             // sanity check
             if (count > data.Length)
@@ -75,7 +104,7 @@ namespace IFS
                     // TODO: this is a really inefficient thing.
                     for (int i = 0; i < count; i++)
                     {
-                        data[i] = _inputQueue.Dequeue();
+                        data[i + offset] = _inputQueue.Dequeue();
                     }
                          
                     _inputLock.ExitWriteLock();
@@ -96,8 +125,33 @@ namespace IFS
             return read;
         }
 
+        public byte ReadByte()
+        {
+            // TODO: optimize this
+            byte[] data = new byte[1];
+
+            Read(ref data, 1);
+
+            return data[0];
+        }
+
+        public ushort ReadUShort()
+        {
+            // TODO: optimize this
+            byte[] data = new byte[2];
+
+            Read(ref data, 2);
+
+            return Helpers.ReadUShort(data, 0);
+        }
+
+        public BCPLString ReadBCPLString()
+        {
+            return new BCPLString(this);
+        }
+
         /// <summary>
-        /// Appends data into the input queue (called from BSPManager to place new PUP data into the BSP stream)
+        /// Appends incoming client data into the input queue (called from BSPManager to place new PUP data into the BSP stream)
         /// </summary>        
         public void WriteQueue(PUP dataPUP)
         {
@@ -117,7 +171,8 @@ namespace IFS
                 // Current behavior is to simply drop all incoming PUPs (and not ACK them) until they are re-sent to us
                 // (in which case the above sanity check will pass).  According to spec, AData requests that are not ACKed
                 // must eventually be resent.  This is far simpler than accepting out-of-order data and keeping track
-                // of where it goes in the queue.
+                // of where it goes in the queue, though less efficient.
+                _inputLock.ExitUpgradeableReadLock();
                 return;
             }
                   
@@ -129,6 +184,8 @@ namespace IFS
             for (int i = 0; i < dataPUP.Contents.Length; i++)
             {
                 _inputQueue.Enqueue(dataPUP.Contents[i]);
+
+                //Console.Write("{0:x} ({1}), ", dataPUP.Contents[i], (char)dataPUP.Contents[i]);
             }
 
             _recv_pos += (UInt32)dataPUP.Contents.Length;
@@ -139,6 +196,7 @@ namespace IFS
 
             _inputWriteEvent.Set();
 
+            // If the client wants an ACK, send it now.
             if ((PupType)dataPUP.Type == PupType.AData)
             {
                 SendAck();
@@ -147,16 +205,23 @@ namespace IFS
         }
 
         /// <summary>
-        /// Sends data to the channel (i.e. to the client).  Will block if an ACK is requested.
+        /// Sends data to the channel (i.e. to the client).  Will block (waiting for an ACK) if an ACK is requested.
         /// </summary>
         /// <param name="data">The data to be sent</param>
         public void Send(byte[] data)
         {
-            // Write data to the output stream
+            // Write data to the output stream.
+            // For now, we request ACKs for every pup sent.
+            // TODO: should buffer data until an entire PUP's worth is ready
+            // (and split data that's too large into multiple PUPs.)
+            PUP dataPup = new PUP(PupType.AData, _send_pos, _clientConnectionPort, _serverConnectionPort, data);
+
+            PUPProtocolDispatcher.Instance.SendPup(dataPup);
+
+            _send_pos += (uint)data.Length;            
 
             // Await an ack for the PUP we just sent            
             _outputAckEvent.WaitOne(); // TODO: timeout and fail
-
         }
 
         /// <summary>
@@ -167,6 +232,15 @@ namespace IFS
         {
             // Update receiving end stats (max PUPs, etc.)
             // Ensure client's position matches ours
+            if (ackPUP.ID != _send_pos)
+            {
+                Log.Write(LogLevel.BSPLostPacket,
+                    String.Format("Client position != server position for BSP {0} ({1} != {2})",
+                        _serverConnectionPort.Socket,
+                        ackPUP.ID,
+                        _send_pos));
+            }
+
 
             // Let any waiting threads continue
             _outputAckEvent.Set();
@@ -186,15 +260,18 @@ namespace IFS
         // Events for:
         //   Abort, End, Mark, Interrupt (from client)
         //   Repositioning (due to lost packets) (perhaps not necessary)
+        // to allow protocols consuming BSP streams to be alerted when things happen.
         //     
 
         private void SendAck()
         {
+            PUP ackPup = new PUP(PupType.Ack, _recv_pos, _clientConnectionPort, _serverConnectionPort);
 
+            PUPProtocolDispatcher.Instance.SendPup(ackPup);
         }
 
+        private BSPProtocol _protocolHandler;
 
-        private BSPState _state;
         private UInt32   _recv_pos;
         private UInt32   _send_pos;
         private UInt32   _start_pos;
@@ -235,8 +312,39 @@ namespace IFS
             // a unique ID.  (Well, until we wrap around...)
             //
             _nextSocketID = _startingSocketID;
+
+            _activeChannels = new Dictionary<uint, BSPChannel>();
         }
 
+        /// <summary>
+        /// Called when a PUP comes in on a known BSP socket
+        /// </summary>
+        /// <param name="p"></param>
+        public static void EstablishRendezvous(PUP p, BSPProtocol protocolHandler)
+        {
+            if (p.Type != PupType.RFC)
+            {
+                Log.Write(LogLevel.Error, String.Format("Expected RFC pup, got {0}", p.Type));
+                return;
+            }
+            
+            UInt32 socketID = GetNextSocketID();
+            BSPChannel newChannel = new BSPChannel(p, socketID, protocolHandler);
+            _activeChannels.Add(socketID, newChannel);          
+
+            //
+            // Initialize the server for this protocol.
+            protocolHandler.InitializeServerForChannel(newChannel);
+
+            // Send RFC response to complete the rendezvous.
+
+            // Modify the destination port to specify our network
+            PUPPort sourcePort = p.DestinationPort;
+            sourcePort.Network = DirectoryServices.Instance.LocalNetwork;
+            PUP rfcResponse = new PUP(PupType.RFC, p.ID, newChannel.ClientPort, sourcePort, newChannel.ServerPort.ToArray());
+
+            PUPProtocolDispatcher.Instance.SendPup(rfcResponse);
+        }
 
         /// <summary>
         /// Called when BSP-based protocols receive data.
@@ -246,82 +354,80 @@ namespace IFS
         /// a new BSPChannel if one has been created based on the PUP (new RFC)
         /// </returns>
         /// <param name="p"></param>
-        public static BSPChannel RecvData(PUP p)
-        {
-            PupType type = (PupType)p.Type;
+        public static void RecvData(PUP p)
+        {            
+            BSPChannel channel = FindChannelForPup(p);
 
-            switch (type)
+            if (channel == null)
+            {
+                Log.Write(LogLevel.Error, "Received BSP PUP on an unconnected socket, ignoring.");
+                return;
+            }
+
+            switch (p.Type)
             {
                 case PupType.RFC:
-                    {                        
-                        BSPChannel newChannel = new BSPChannel(p, GetNextSocketID());
-                        _activeChannels.Add(newChannel.ServerPort.Socket, newChannel);
-
-                        // Send RFC response to complete the rendezvous.
-                        PUP rfcResponse = new PUP(PupType.RFC, p.ID, newChannel.ClientPort, newChannel.ServerPort, newChannel.ServerPort.ToArray());
-
-                        Dispatcher.Instance.SendPup(rfcResponse);
-
-                        return newChannel;
-                    }
+                    Log.Write(LogLevel.Error, "Received RFC on established channel, ignoring.");
                     break;
 
                 case PupType.Data:
                 case PupType.AData:
-                    {
-                        BSPChannel channel = FindChannelForPup(p);
-
-                        if (channel != null)
-                        {                            
-                            channel.WriteQueue(p);
-                        }
+                    {           
+                        channel.WriteQueue(p);                                             
                     }
                     break;
 
                 case PupType.Ack:
-                    {
-                        BSPChannel channel = FindChannelForPup(p);
-
-                        if (channel != null)
-                        {
-                            channel.Ack(p);
-                        }
+                    {                        
+                        channel.Ack(p);                        
                     }
                     break;
 
                 case PupType.End:
-                    {
-                        BSPChannel channel = FindChannelForPup(p);
-
-                        if (channel != null)
-                        {
-                            //channel.EndReply();
-                        }
+                    {                        
+                        //channel.EndReply();
                     }
                     break;
 
                 case PupType.Abort:
                     {
                         // TODO: tear down the channel
+                        DestroyChannel(channel);
+
+                        string abortMessage = Helpers.ArrayToString(p.Contents);
+
+                        Log.Write(LogLevel.Warning, String.Format("BSP aborted, message: '{0}'", abortMessage));
                     }
                     break;
 
                 default:
-                    throw new NotImplementedException(String.Format("Unhandled BSP PUP type {0}.", type));
+                    throw new NotImplementedException(String.Format("Unhandled BSP PUP type {0}.", p.Type));
 
-            }
+            }                    
+        }
 
-            return null;             
+        public static bool ChannelExistsForSocket(PUP p)
+        {
+            return FindChannelForPup(p) != null;
         }
 
         public static void DestroyChannel(BSPChannel channel)
         {
-            
+            channel.Destroy();
+
+            _activeChannels.Remove(channel.ServerPort.Socket);
         }
 
         private static BSPChannel FindChannelForPup(PUP p)
         {
-            return null;
+            if (_activeChannels.ContainsKey(p.DestinationPort.Socket))
+            {
+                return _activeChannels[p.DestinationPort.Socket];
+            }
+            else
+            {
+                return null;
+            }
         }
 
         private static UInt32 GetNextSocketID()

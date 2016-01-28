@@ -1,0 +1,23 @@
+﻿# hosts.txt:
+#
+# This is similar in nearly every way to a typical UNIX 'hosts' file except that
+# Xerox Inter-Network Name Expressions (i.e. network#host#) are used instead of IP addresses.
+#
+# Format for Inter-Network name expressions is either:
+#  network#host#  (to specify hosts on another network)
+#    or
+#  host#          (to specify hosts on the same network as this IFS server)
+#
+#  all numbers are in octal.
+#
+
+1#                ifs
+42#               Muffin
+43#               Pumpkin
+
+43#               Duplicate
+45#               Pumpkin
+
+# to test
+5#177#            NotHere
+

@@ -55,6 +55,7 @@ namespace IFS
         /// </summary>
         /// <param name="p"></param>
         public abstract void RecvData(PUP p);
-        
+
     }
+
 }

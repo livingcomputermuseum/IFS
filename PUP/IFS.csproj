@@ -80,15 +80,21 @@
     <Compile Include="EchoProtocol.cs" />
     <Compile Include="Entrypoint.cs" />
     <Compile Include="Logging\Log.cs" />
+    <Compile Include="GatewayInformationProtocol.cs" />
     <Compile Include="MiscServicesProtocol.cs" />
+    <Compile Include="Serializer.cs" />
     <Compile Include="Transport\Ethernet.cs" />
     <Compile Include="PUPProtocolBase.cs" />
     <Compile Include="PUP.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Dispatcher.cs" />
+    <Compile Include="PUPProtocolDispatcher.cs" />
     <Compile Include="Transport\PacketInterface.cs" />
   </ItemGroup>
-  <ItemGroup />
+  <ItemGroup>
+    <Content Include="Conf\hosts.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
