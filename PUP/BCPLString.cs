@@ -111,12 +111,14 @@ namespace IFS
         }
 
         /// <summary>
-        /// Returns the raw representation of the BCPL string
+        /// Returns the raw representation of the BCPL string.
+        /// This returned array is padded to a word boundary.
         /// </summary>
         /// <returns></returns>
         public byte[] ToArray()
         {
-            byte[] a = new byte[_string.Length + 1];
+            int length = _string.Length + ((_string.Length % 2) == 0 ? 2 : 1);
+            byte[] a = new byte[length];
 
             a[0] = (byte)_string.Length;
             _string.CopyTo(a, 1);

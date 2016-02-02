@@ -1,4 +1,5 @@
-﻿using IFS.Transport;
+﻿using IFS.CopyDisk;
+using IFS.Transport;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -33,9 +34,7 @@ namespace IFS
 
 
             foo oldFoo = (foo) Serializer.Deserialize(data, typeof(foo));
-            
-
-            Logging.Log.Level = Logging.LogLevel.All;
+                        
 
             List<EthernetInterface> ifaces = EthernetInterface.EnumerateDevices();
 

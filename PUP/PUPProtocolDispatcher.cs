@@ -57,12 +57,25 @@ namespace IFS
         }
 
         public void SendPup(PUP p)
-        {
+        {            
             _pupPacketInterface.Send(p);            
         }
 
         private void OnPupReceived(PUP pup)
         {
+            //
+            // Filter out packets not destined for us.
+            // Even though we use pcap in non-promiscuous mode, if
+            // something else has set the interface to promiscuous mode, that
+            // setting may be overridden.
+            //
+            if (pup.DestinationPort.Host != 0 &&                                           // Not broadcast.
+                pup.DestinationPort.Host != DirectoryServices.Instance.LocalHost)          // Not our address.
+            {
+                // Do nothing with this PUP.
+                return;
+            }
+
             //      
             // Forward PUP on to registered endpoints.
             //                                    
@@ -72,14 +85,14 @@ namespace IFS
 
                 if (entry.ConnectionType == ConnectionType.Connectionless)
                 {
-                    Log.Write(LogLevel.HandledProtocol, String.Format("Dispatching PUP to {0} handler.", entry.FriendlyName));
+                    Log.Write(LogType.Verbose, LogComponent.PUP, "Dispatching PUP (source {0}, dest {1}) to {2} handler.", pup.SourcePort, pup.DestinationPort, entry.FriendlyName);
                     // Connectionless; just pass the PUP directly to the protocol
                     entry.ProtocolImplementation.RecvData(pup);
                 }
                 else
                 {
                     // RTP / BSP protocol.  Pass this to the BSP handler to set up a channel.
-                    Log.Write(LogLevel.HandledProtocol, String.Format("Dispatching PUP to BSP protocol for {0}.", entry.FriendlyName));
+                    Log.Write(LogType.Verbose, LogComponent.PUP, "Dispatching PUP (source {0}, dest {1}) to BSP protocol for {0}.", pup.SourcePort, pup.DestinationPort, entry.FriendlyName);
                     //entry.ProtocolImplementation.RecvData(pup);
 
                     BSPManager.EstablishRendezvous(pup, (BSPProtocol)entry.ProtocolImplementation);
@@ -93,7 +106,7 @@ namespace IFS
             else
             {
                 // Not a protocol we handle; log it.
-                Log.Write(LogLevel.UnhandledProtocol | LogLevel.DroppedPacket, String.Format("Unhandled PUP protocol, socket {0}, dropped packet.", pup.DestinationPort.Socket));
+                Log.Write(LogType.Normal, LogComponent.PUP, "Unhandled PUP protocol, socket {0}, dropped packet.", pup.DestinationPort.Socket);
             }            
         }
       

@@ -59,7 +59,7 @@ namespace IFS
         /// <param name="p"></param>
         public override void RecvData(PUP p)
         {
-            Log.Write(LogLevel.HandledProtocol, String.Format("Misc. protocol request is for {0}.", p.Type));
+            Log.Write(LogType.Verbose, LogComponent.MiscServices, String.Format("Misc. protocol request is for {0}.", p.Type));
             switch (p.Type)
             {
                 case PupType.StringTimeRequest:
@@ -79,7 +79,7 @@ namespace IFS
                     break;                
 
                 default:
-                    Log.Write(LogLevel.UnhandledProtocol, String.Format("Unhandled misc. protocol {0}", p.Type));
+                    Log.Write(LogComponent.MiscServices, String.Format("Unhandled misc. protocol {0}", p.Type));
                     break;
             }
         }

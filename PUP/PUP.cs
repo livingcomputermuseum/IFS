@@ -1,4 +1,5 @@
-﻿using System;
+﻿using IFS.Logging;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -8,6 +9,9 @@ using System.Threading.Tasks;
 
 namespace IFS
 {
+    /// <summary>
+    /// All of the different types of PUPs.
+    /// </summary>
     public enum PupType
     {
         // Basic types
@@ -126,6 +130,11 @@ namespace IFS
             byte[] a = new byte[6];
             WriteToArray(ref a, 0);
             return a;
+        }
+
+        public override string ToString()
+        {
+            return String.Format("Net {0} Host {1} Socket {2}", Network, Host, Socket);
         }
 
         public byte Network;
@@ -278,7 +287,7 @@ namespace IFS
             if (Checksum != 0xffff && cChecksum != Checksum)
             {
                 // TODO: determine what to do with packets that are corrupted.
-                Logging.Log.Write(Logging.LogLevel.Warning, String.Format("PUP checksum is invalid. (got {0:x}, expected {1:x})", Checksum, cChecksum));
+                Log.Write(LogType.Warning, LogComponent.PUP, "PUP checksum is invalid. (got {0:x}, expected {1:x})", Checksum, cChecksum);
             }
 
         }
@@ -332,11 +341,9 @@ namespace IFS
 
         private byte[] _rawData;
 
-        private const int MAX_PUP_SIZE = 532;
-        private const int PUP_HEADER_SIZE = 20;
-        private const int PUP_CHECKSUM_SIZE = 2;
-
-        
+        public readonly static int MAX_PUP_SIZE = 532;
+        public readonly static int PUP_HEADER_SIZE = 20;
+        public readonly static int PUP_CHECKSUM_SIZE = 2;       
     }
 
     public static class Helpers

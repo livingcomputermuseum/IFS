@@ -121,7 +121,7 @@ namespace IFS.Transport
             else
             {
                 // Log error, this should not happen.
-                Log.Write(LogLevel.Error, String.Format("PUP destination address {0} is unknown.", p.DestinationPort.Host));
+                Log.Write(LogType.Error, LogComponent.Ethernet, String.Format("PUP destination address {0} is unknown.", p.DestinationPort.Host));
             }
         }
 
@@ -163,12 +163,12 @@ namespace IFS.Transport
                     else
                     {
                         // Not for our network.
-                        Log.Write(LogLevel.DroppedPacket, String.Format("PUP is for network {0}, dropping.", pup.DestinationPort.Network));
+                        Log.Write(LogType.Verbose, LogComponent.Ethernet, "PUP is for network {0}, dropping.", pup.DestinationPort.Network);
                     }
                 }
                 else
                 {
-                    Log.Write(LogLevel.DroppedPacket, String.Format("3mbit packet is not a PUP, dropping"));
+                    Log.Write(LogType.Warning, LogComponent.Ethernet, "3mbit packet is not a PUP, dropping");
                 }
             }
             else
@@ -229,11 +229,11 @@ namespace IFS.Transport
                 //
                 if (_pupToEthernetMap[p.SourcePort.Host] != e.Ethernet.Source)
                 {
-                    Log.Write(LogLevel.DuplicateHostNumber,
-                        String.Format("Duplicate host ID {0} for MAC {1} (currently mapped to MAC {2})",
-                            p.SourcePort.Host,
-                            e.Ethernet.Source,
-                            _pupToEthernetMap[p.SourcePort.Host]));
+                    Log.Write(LogType.Error, LogComponent.Ethernet,
+                        "Duplicate host ID {0} for MAC {1} (currently mapped to MAC {2})",
+                        p.SourcePort.Host,
+                        e.Ethernet.Source,
+                        _pupToEthernetMap[p.SourcePort.Host]);
                 }
             }
             else

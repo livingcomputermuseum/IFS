@@ -75,7 +75,8 @@
     <Compile Include="BCPLString.cs" />
     <Compile Include="BreathOfLife.cs" />
     <Compile Include="BSPManager.cs" />
-    <Compile Include="CopyDiskServer.cs" />
+    <Compile Include="CopyDisk\CopyDiskServer.cs" />
+    <Compile Include="CopyDisk\DiabloPack.cs" />
     <Compile Include="DirectoryServices.cs" />
     <Compile Include="EchoProtocol.cs" />
     <Compile Include="Entrypoint.cs" />
@@ -94,6 +95,15 @@
     <Content Include="Conf\hosts.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+  </ItemGroup>
+  <ItemGroup />
+  <ItemGroup>
+    <None Include="Disks\diag.dsk">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Disks\tdisk8.dsk">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

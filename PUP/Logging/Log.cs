@@ -1,50 +1,106 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿#define LOGGING_ENABLED
+
+using System;
+using System.IO;
 
 namespace IFS.Logging
 {
+    /// <summary>
+    /// Specifies a component to specify logging for
+    /// </summary>
     [Flags]
-    public enum LogLevel
+    public enum LogComponent
     {
         None = 0,
-        Normal = 1,
-        Warning = 2,
-        Error = 4,
-        DroppedPacket = 8,
-        InvalidPacket = 0x10,
-        UnhandledProtocol = 0x20,
-        HandledProtocol = 0x40,
-        DuplicateHostNumber = 0x80,
-        BSPLostPacket = 0x100,
-
-        All = 0x7fffffff,
+        Ethernet = 0x1,
+        RTP = 0x2,
+        BSP = 0x4,
+        MiscServices = 0x8,
+        CopyDisk = 0x10,
+        DirectoryServices = 0x20,
+        PUP = 0x40,
+        
+        All = 0x7fffffff
     }
 
+    /// <summary>
+    /// Specifies the type (or severity) of a given log message
+    /// </summary>
+    [Flags]
+    public enum LogType
+    {
+        None = 0,
+        Normal = 0x1,
+        Warning = 0x2,
+        Error = 0x4,
+        Verbose = 0x8,
+        All = 0x7fffffff
+    }
+
+    /// <summary>
+    /// Provides basic functionality for logging messages of all types.
+    /// </summary>
     public static class Log
     {
         static Log()
         {
-            _level = LogLevel.All;
+            // TODO: make configurable
+            _components = LogComponent.All;
+            _type = LogType.Normal;
+
+            //_logStream = new StreamWriter("log.txt");
         }
 
-        public static LogLevel Level
+        public static LogComponent LogComponents
         {
-            get { return _level; }
-            set { _level = value; }
+            get { return _components; }
+            set { _components = value; }
         }
 
-        public static void Write(LogLevel level, string message)
+#if LOGGING_ENABLED
+        /// <summary>
+        /// Logs a message without specifying type/severity for terseness;
+        /// will not log if Type has been set to None.
+        /// </summary>
+        /// <param name="level"></param>
+        /// <param name="message"></param>
+        /// <param name="args"></param>
+        public static void Write(LogComponent component, string message, params object[] args)
         {
-            if ((level & _level) != 0)
+            Write(LogType.Normal, component, message, args);
+        }
+
+        public static void Write(LogType type, LogComponent component, string message, params object[] args)
+        {
+            if ((_type & type) != 0 &&
+                (_components & component) != 0)
             {
+                //
                 // My log has something to tell you...
-                Console.WriteLine("{0}: {1} - {2}", DateTime.Now, level, message);
+                // TODO: color based on type, etc.
+                Console.WriteLine(component.ToString() + ": " + message, args);
+
+                if (_logStream != null)
+                {
+                    _logStream.WriteLine(component.ToString() + ": " + message, args);
+                }
             }
         }
+#else
+        public static void Write(LogComponent component, string message, params object[] args)
+        {
+            
+        }
 
-        private static LogLevel _level;
+        public static void Write(LogType type, LogComponent component, string message, params object[] args)
+        {
+
+        }
+
+#endif
+
+        private static LogComponent _components;
+        private static LogType _type;
+        private static StreamWriter _logStream;
     }
 }

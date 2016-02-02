@@ -4,6 +4,7 @@ using System.Linq;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
+using IFS.Logging;
 
 namespace IFS
 {
@@ -41,7 +42,7 @@ namespace IFS
             // Load in hosts table from hosts file.
             LoadHostTable();
 
-            Logging.Log.Write(Logging.LogLevel.Normal, "Directory services initialized.");
+            Log.Write(LogComponent.DirectoryServices, "Directory services initialized.");
         }
 
         public string AddressLookup(HostAddress address)
@@ -142,8 +143,8 @@ namespace IFS
                     if (tokens.Length < 2)
                     {
                         // Log warning and continue.
-                        Logging.Log.Write(Logging.LogLevel.Warning,
-                            String.Format("hosts.txt line {0}: Invalid syntax.", lineNumber));
+                        Log.Write(LogType.Warning, LogComponent.DirectoryServices,
+                            "hosts.txt line {0}: Invalid syntax.", lineNumber);
 
                         continue;
                     }
@@ -152,8 +153,8 @@ namespace IFS
                     if (!tokens[0].EndsWith("#"))
                     {
                         // Log warning and continue.
-                        Logging.Log.Write(Logging.LogLevel.Warning,
-                            String.Format("hosts.txt line {0}: Improperly formed inter-network name '{1}'.", lineNumber, tokens[0]));
+                        Log.Write(LogType.Warning, LogComponent.DirectoryServices,
+                            "hosts.txt line {0}: Improperly formed inter-network name '{1}'.", lineNumber, tokens[0]);
 
                         continue;
                     }
@@ -173,8 +174,8 @@ namespace IFS
                         catch
                         {
                             // Log warning and continue.
-                            Logging.Log.Write(Logging.LogLevel.Warning,
-                                String.Format("hosts.txt line {0}: Invalid host number in inter-network address '{1}'.", lineNumber, tokens[0]));
+                            Log.Write(LogType.Warning, LogComponent.DirectoryServices,
+                                "hosts.txt line {0}: Invalid host number in inter-network address '{1}'.", lineNumber, tokens[0]);
 
                             continue;
                         }
@@ -189,8 +190,8 @@ namespace IFS
                         catch
                         {
                             // Log warning and continue.
-                            Logging.Log.Write(Logging.LogLevel.Warning,
-                                String.Format("hosts.txt line {0}: Invalid host or network number in inter-network address '{1}'.", lineNumber, tokens[0]));
+                            Log.Write(LogType.Warning, LogComponent.DirectoryServices,
+                                "hosts.txt line {0}: Invalid host or network number in inter-network address '{1}'.", lineNumber, tokens[0]);
 
                             continue;
                         }
@@ -198,8 +199,8 @@ namespace IFS
                     else
                     {
                         // Log warning and continue.
-                        Logging.Log.Write(Logging.LogLevel.Warning,
-                            String.Format("hosts.txt line {0}: Improperly formed inter-network name '{1}'.", lineNumber, tokens[0]));
+                        Log.Write(LogType.Warning, LogComponent.DirectoryServices,
+                            "hosts.txt line {0}: Improperly formed inter-network name '{1}'.", lineNumber, tokens[0]);
 
                         continue;
                     }
@@ -213,8 +214,8 @@ namespace IFS
                         if (_hostNameTable.ContainsKey(hostName))
                         {
                             // Duplicate name entry!  Skip this line.
-                            Logging.Log.Write(Logging.LogLevel.Warning,
-                                String.Format("hosts.txt line {0}: Duplicate hostname '{1}'.", lineNumber, hostName));
+                            Log.Write(LogType.Warning, LogComponent.DirectoryServices,
+                                "hosts.txt line {0}: Duplicate hostname '{1}'.", lineNumber, hostName);
                             break;
                         }
 
@@ -239,8 +240,8 @@ namespace IFS
                         if (networkTable.ContainsKey(host.Host))
                         {
                             // Duplicate host entry!  Skip this line.
-                            Logging.Log.Write(Logging.LogLevel.Warning,
-                               String.Format("hosts.txt line {0}: Duplicate host ID '{1}'.", lineNumber, host.Host));
+                            Log.Write(LogType.Warning, LogComponent.DirectoryServices,
+                               "hosts.txt line {0}: Duplicate host ID '{1}'.", lineNumber, host.Host);
                             break;
                         }
 
