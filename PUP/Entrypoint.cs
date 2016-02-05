@@ -1,4 +1,5 @@
 ﻿using IFS.CopyDisk;
+using IFS.FTP;
 using IFS.Transport;
 using System;
 using System.Collections.Generic;
@@ -9,33 +10,9 @@ using System.Threading.Tasks;
 namespace IFS
 {
     public class Entrypoint
-    {
-        struct foo
-        {
-            public ushort Bar;
-            public short Baz;
-            public byte Thing;            
-            public int Inty;
-            public uint Uinty;
-            public BCPLString Quux;
-        }
-
+    {        
         static void Main(string[] args)
-        {
-            foo newFoo = new foo();
-            newFoo.Bar = 0x1234;
-            newFoo.Baz = 0x5678;
-            newFoo.Thing = 0xcc;
-            newFoo.Inty = 0x01020304;
-            newFoo.Uinty = 0x05060708;
-            newFoo.Quux = new BCPLString("The quick brown fox jumped over the lazy dog's tail.");
-
-            byte[] data = Serializer.Serialize(newFoo);
-
-
-            foo oldFoo = (foo) Serializer.Deserialize(data, typeof(foo));
-                        
-
+        {                                   
             List<EthernetInterface> ifaces = EthernetInterface.EnumerateDevices();
 
             Console.WriteLine("available interfaces are:");
@@ -53,6 +30,7 @@ namespace IFS
 
             // RTP/BSP based:            
             PUPProtocolDispatcher.Instance.RegisterProtocol(new PUPProtocolEntry("CopyDisk", 0x15  /* 25B */, ConnectionType.BSP, new CopyDiskServer()));
+            PUPProtocolDispatcher.Instance.RegisterProtocol(new PUPProtocolEntry("FTP", 0x3, ConnectionType.BSP, new FTPServer()));
 
             // TODO: MAKE THIS CONFIGURABLE.
             PUPProtocolDispatcher.Instance.RegisterInterface(ifaces[2]);

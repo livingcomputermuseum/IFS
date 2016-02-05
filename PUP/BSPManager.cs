@@ -36,7 +36,7 @@ namespace IFS
             _outputLock = new ReaderWriterLockSlim();
 
             _inputWriteEvent = new AutoResetEvent(false);
-            _inputQueue = new Queue<byte>(65536);
+            _inputQueue = new Queue<ushort>(65536);
 
             _outputAckEvent = new AutoResetEvent(false);
             _outputQueue = new Queue<byte>(65536);
@@ -71,6 +71,14 @@ namespace IFS
             get { return _serverConnectionPort; }
         }
 
+        /// <summary>
+        /// Returns the last Mark byte received, if any.
+        /// </summary>
+        public byte LastMark
+        {
+            get { return _lastMark; }
+        }
+
         public void Destroy()
         {
             if (OnDestroy != null)
@@ -103,43 +111,68 @@ namespace IFS
 
         /// <summary>
         /// Reads data from the channel (i.e. from the client).  Will block if not all the requested data is available.
+        /// If a Mark byte is encountered, will return a short read.
         /// </summary>
         /// <returns></returns>
         public int Read(ref byte[] data, int count, int offset)
         {            
             // sanity check
-            if (count > data.Length)
+            if (count + offset > data.Length)
             {
-                throw new InvalidOperationException("count must be less than or equal to the length of the buffer being read into.");
+                throw new InvalidOperationException("count + offset must be less than or equal to the length of the buffer being read into.");
             }
 
             int read = 0;
 
-            // Loop until the data we asked for arrives or until we time out waiting.
-            // TODO: handle partial transfers due to aborted BSPs.
-            while (true)
+            //
+            // Loop until either:
+            // - all the data we asked for arrives 
+            // - we get a Mark byte
+            // - we time out waiting for data
+            //
+            bool done = false;
+            while (!done)
             {
                 _inputLock.EnterUpgradeableReadLock();
-                if (_inputQueue.Count >= count)
+                if (_inputQueue.Count > 0)
                 {
                     _inputLock.EnterWriteLock();
-                    // We have the data right now, read it and return.
-                    // TODO: this is a really inefficient thing.
-                    for (int i = 0; i < count; i++)
-                    {
-                        data[i + offset] = _inputQueue.Dequeue();
-                    }
-                         
-                    _inputLock.ExitWriteLock();
-                    _inputLock.ExitUpgradeableReadLock();
 
-                    break;
+                    // We have some data right now, read it in.
+                    // TODO: this code is ugly and it wants to die.
+                    while (_inputQueue.Count > 0 && read < count)                    
+                    {
+                        ushort word = _inputQueue.Dequeue();                        
+
+                        // Is this a mark or a data byte?
+                        if (word < 0x100)
+                        {
+                            // Data, place in data stream
+                            data[read + offset] = (byte)word;
+                            read++;                                                       
+                        }
+                        else
+                        {
+                            // Mark.  Set last mark and exit.
+                            _lastMark = (byte)(word >> 8);
+                            done = true;
+                            break;
+                        }
+                    }
+
+                    if (read >= count)
+                    {
+                        done = true;
+                    }
+
+                    _inputLock.ExitWriteLock();
+                    _inputLock.ExitUpgradeableReadLock();                    
                 }
                 else
                 {
                     _inputLock.ExitUpgradeableReadLock();
 
-                    // Not enough data in the queue.
+                    // No data in the queue.
                     // Wait until we have received more data, then try again.
                     if (!_inputWriteEvent.WaitOne(BSPReadTimeoutPeriod))
                     {
@@ -180,10 +213,53 @@ namespace IFS
         }
 
         /// <summary>
-        /// Appends incoming client data into the input queue (called from BSPManager to place new PUP data into the BSP stream)
+        /// Reads data from the queue until a Mark byte is received.
+        /// The mark byte is returned (LastMark is also set.)
+        /// </summary>
+        /// <returns></returns>
+        public byte WaitForMark()
+        {
+            byte mark = 0;
+
+            // This data is discarded.  The length is arbitrary.
+            byte[] dummyData = new byte[512];
+
+            while(true)
+            {
+                int read = Read(ref dummyData, dummyData.Length);
+                
+                // Short read, indicating a Mark.
+                if (read < dummyData.Length)
+                {
+                    mark = _lastMark;
+                    break;
+                }
+            }
+
+            return mark;
+        }
+
+        /// <summary>
+        /// Appends incoming client data or Marks into the input queue (called from BSPManager to place new PUP data into the BSP stream)
         /// </summary>        
         public void RecvWriteQueue(PUP dataPUP)
         {
+            //
+            // Sanity check:  If this is a Mark PUP, the contents must only be one byte in length.
+            //
+            bool markPup = dataPUP.Type == PupType.AMark || dataPUP.Type == PupType.Mark;
+            if (markPup)
+            {
+                if (dataPUP.Contents.Length != 1)
+                {
+                    Log.Write(LogType.Error, LogComponent.BSP, "Mark PUP must be 1 byte in length.");
+
+                    SendAbort("Mark PUP must be 1 byte in length.");
+                    BSPManager.DestroyChannel(this);
+                    return;
+                }
+            }
+
             // If we are over our high watermark, we will drop the data (and not send an ACK even if requested).
             // Clients should be honoring the limits we set in the RFC packets.
             _inputLock.EnterUpgradeableReadLock();
@@ -211,15 +287,24 @@ namespace IFS
                   
 
             // Prepare to add data to the queue
-            // Again, this is really inefficient
+            
             _inputLock.EnterWriteLock();
 
-            for (int i = 0; i < dataPUP.Contents.Length; i++)
+            if (markPup)
             {
-                _inputQueue.Enqueue(dataPUP.Contents[i]);
-
-                //Console.Write("{0:x} ({1}), ", dataPUP.Contents[i], (char)dataPUP.Contents[i]);
-            }            
+                //
+                // For mark pups, the data goes in the high byte of the word
+                // so that it can be identified as a mark when it's read back.
+                _inputQueue.Enqueue((ushort)(dataPUP.Contents[0] << 8));
+            }
+            else
+            {
+                // Again, this is really inefficient
+                for (int i = 0; i < dataPUP.Contents.Length; i++)
+                {
+                    _inputQueue.Enqueue(dataPUP.Contents[i]);
+                }
+            }           
 
             _recv_pos += (UInt32)dataPUP.Contents.Length;
 
@@ -230,11 +315,10 @@ namespace IFS
             _inputWriteEvent.Set();
 
             // If the client wants an ACK, send it now.
-            if ((PupType)dataPUP.Type == PupType.AData)
+            if (dataPUP.Type == PupType.AData || dataPUP.Type == PupType.AMark)
             {             
                 SendAck();                
             }
-
         }
 
         /// <summary>
@@ -274,31 +358,9 @@ namespace IFS
                     }
 
                     // Send the data, retrying as necessary.
-                    int retry;
-                    for (retry = 0; retry < BSPRetryCount; retry++)
-                    {
-                        PUP dataPup = new PUP(PupType.AData, _send_pos, _clientConnectionPort, _serverConnectionPort, chunk);
-                        PUPProtocolDispatcher.Instance.SendPup(dataPup);
-
-                        _send_pos += (uint)chunk.Length;
-
-                        // Await an ack for the PUP we just sent.  If we timeout, we will retry.
-                        //     
-                        if (_outputAckEvent.WaitOne(BSPAckTimeoutPeriod))
-                        {
-                            break;
-                        }
-
-                        Log.Write(LogType.Warning, LogComponent.BSP, "ACK not received for sent data, retrying.");
-                    }
-
-                    if (retry >= BSPRetryCount)
-                    {
-                        Log.Write(LogType.Error, LogComponent.BSP, "ACK not received after retries, aborting connection.");
-                        SendAbort("ACK not received for sent data.");
-                        BSPManager.DestroyChannel(this);
-                    }
-
+                    PUP dataPup = new PUP(PupType.AData, _send_pos, _clientConnectionPort, _serverConnectionPort, chunk);
+                    _send_pos += (uint)chunk.Length;
+                    SendPupAwaitAck(dataPup);                    
                 }
             }           
         }
@@ -308,6 +370,23 @@ namespace IFS
             PUP abortPup = new PUP(PupType.Abort, _start_pos, _clientConnectionPort, _serverConnectionPort, Helpers.StringToArray(message));
             PUPProtocolDispatcher.Instance.SendPup(abortPup);
         }
+
+        public void SendMark(byte markType, bool ack)
+        {
+            PUP markPup = new PUP(ack ? PupType.AMark : PupType.Mark, _send_pos, _clientConnectionPort, _serverConnectionPort, new byte[] { markType });
+
+            // Move pointer one byte for the Mark.
+            _send_pos++;
+
+            if (ack)
+            {
+                SendPupAwaitAck(markPup);
+            }
+            else
+            {
+                PUPProtocolDispatcher.Instance.SendPup(markPup);
+            }
+        }       
 
         /// <summary>
         /// Invoked when the client sends an ACK
@@ -368,6 +447,37 @@ namespace IFS
             PUPProtocolDispatcher.Instance.SendPup(ackPup);
         }
 
+        /// <summary>
+        /// Sends a PUP and waits for acknowledgement.  On timeout, will retry.
+        /// If all retries fails, the channel is closed.
+        /// </summary>
+        /// <param name="p"></param>
+        private void SendPupAwaitAck(PUP p)
+        {
+            // Send the data, retrying as necessary.
+            int retry;
+            for (retry = 0; retry < BSPRetryCount; retry++)
+            {
+                PUPProtocolDispatcher.Instance.SendPup(p);
+
+                // Await an ack for the PUP we just sent.  If we timeout, we will retry.
+                //     
+                if (_outputAckEvent.WaitOne(BSPAckTimeoutPeriod))
+                {
+                    break;
+                }
+
+                Log.Write(LogType.Warning, LogComponent.BSP, "ACK not received for sent data, retrying.");
+            }
+
+            if (retry >= BSPRetryCount)
+            {
+                Log.Write(LogType.Error, LogComponent.BSP, "ACK not received after retries, aborting connection.");
+                SendAbort("ACK not received for sent data.");
+                BSPManager.DestroyChannel(this);
+            }
+        }
+
         private BSPProtocol _protocolHandler;
 
         private UInt32   _recv_pos;
@@ -384,9 +494,12 @@ namespace IFS
 
         private System.Threading.AutoResetEvent     _outputAckEvent;
 
-        // TODO: replace this with a more efficient structure for buffering data
-        private Queue<byte> _inputQueue;
+        // NOTE: The input queue consists of ushorts so that
+        // we can encapsulate Mark bytes without using a separate data structure.
+        private Queue<ushort> _inputQueue;
         private Queue<byte> _outputQueue;
+
+        private byte _lastMark;
 
         // Constants
 
@@ -499,6 +612,13 @@ namespace IFS
                     {
                         // Last step of tearing down a connection, the EndReply from the client.
                         DestroyChannel(channel);
+                    }
+                    break;
+                
+                case PupType.Mark:
+                case PupType.AMark:
+                    {
+                        channel.RecvWriteQueue(p);
                     }
                     break;
 

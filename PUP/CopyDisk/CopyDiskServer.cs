@@ -205,6 +205,7 @@ namespace IFS.CopyDisk
         public override void InitializeServerForChannel(BSPChannel channel)
         {
             // Spawn new worker
+            // TODO: keep track of workers to allow clean shutdown, management, etc.
             CopyDiskWorker worker = new CopyDiskWorker(channel);
         }
     }

@@ -55,6 +55,7 @@ namespace IFS
             //  - int
             //  - uint
             //  - BCPLString
+            //  - string  (MUST be last field in struct, if present)
             //  - byte[]
             //
             // Struct fields are serialized in the order they are defined in the struct.  Only Public instance fields are considered.
@@ -131,6 +132,25 @@ namespace IFS
                         }
                         break;
 
+                    case "String":
+                        {
+                            // The field MUST be the last in the struct.
+                            if (i != info.Length - 1)
+                            {
+                                throw new InvalidOperationException("Non-BCPL strings must be the last field in the struct to be deserialized.");
+                            }
+
+                            StringBuilder sb = new StringBuilder((int)(ms.Length - ms.Position));
+
+                            while (ms.Position != ms.Length)
+                            {
+                                sb.Append((char)ms.ReadByte());
+                            }
+
+                            info[i].SetValue(o, sb.ToString());
+                        }
+                        break;
+
                     default:
                         throw new InvalidOperationException(String.Format("Type {0} is unsupported for deserialization.", info[i].FieldType.Name));
                 }                
@@ -147,7 +167,7 @@ namespace IFS
         public static byte[] Serialize(object o)
         {            
             MemoryStream ms = new MemoryStream();
-            
+
             //
             // We support serialization of structs containing only:
             //  - byte   
@@ -155,6 +175,8 @@ namespace IFS
             //  - short  
             //  - int
             //  - uint
+            //  - string
+            //  - byte[]
             //  - BCPLString
             //
             // Struct fields are serialized in the order they are defined in the struct.  Only Public instance fields are considered.
@@ -232,7 +254,14 @@ namespace IFS
                             ms.Write(value, 0, value.Length);
                         }
                         break;
-                    
+
+                    case "String":
+                        {                            
+                            string value = (string)(info[i].GetValue(o));
+                            byte[] stringArray = Helpers.StringToArray(value);
+                            ms.Write(stringArray, 0, stringArray.Length);
+                        }
+                        break;
 
                     default:
                         throw new InvalidOperationException(String.Format("Type {0} is unsupported for serialization.", info[i].FieldType.Name));

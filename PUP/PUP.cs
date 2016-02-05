@@ -189,10 +189,11 @@ namespace IFS
             Contents = new byte[contentLength];
             contents.CopyTo(Contents, 0);
 
-            Length = (ushort)(PUP_HEADER_SIZE + PUP_CHECKSUM_SIZE + contentLength);            
+            // Length is always the real length of the data (not padded to an even number)
+            Length = (ushort)(PUP_HEADER_SIZE + PUP_CHECKSUM_SIZE + contents.Length);            
 
             // Stuff data into raw array
-            _rawData = new byte[Length];
+            _rawData = new byte[PUP_HEADER_SIZE + PUP_CHECKSUM_SIZE + contentLength];
 
             //
             // Subtract off one byte from the Length value if the contents contain a garbage byte.

@@ -80,6 +80,7 @@
     <Compile Include="DirectoryServices.cs" />
     <Compile Include="EchoProtocol.cs" />
     <Compile Include="Entrypoint.cs" />
+    <Compile Include="FTP\FTPServer.cs" />
     <Compile Include="Logging\Log.cs" />
     <Compile Include="GatewayInformationProtocol.cs" />
     <Compile Include="MiscServicesProtocol.cs" />

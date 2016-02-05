@@ -19,6 +19,7 @@ namespace IFS.Logging
         CopyDisk = 0x10,
         DirectoryServices = 0x20,
         PUP = 0x40,
+        FTP = 0x80,
         
         All = 0x7fffffff
     }
@@ -46,7 +47,7 @@ namespace IFS.Logging
         {
             // TODO: make configurable
             _components = LogComponent.All;
-            _type = LogType.Normal;
+            _type = LogType.All;
 
             //_logStream = new StreamWriter("log.txt");
         }
