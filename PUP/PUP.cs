@@ -186,7 +186,7 @@ namespace IFS
 
             // Ensure contents are an even number of bytes.
             int contentLength = (contents.Length % 2) == 0 ? contents.Length : contents.Length + 1;
-            Contents = new byte[contentLength];
+            Contents = new byte[contents.Length];
             contents.CopyTo(Contents, 0);
 
             // Length is always the real length of the data (not padded to an even number)
@@ -209,7 +209,7 @@ namespace IFS
             Helpers.WriteUInt(ref _rawData, ID, 4);
             DestinationPort.WriteToArray(ref _rawData, 8);
             SourcePort.WriteToArray(ref _rawData, 14);
-            Array.Copy(Contents, 0, _rawData, 20, contentLength);
+            Array.Copy(Contents, 0, _rawData, 20, Contents.Length);
 
             // Calculate the checksum and stow it
             Checksum = CalculateChecksum();

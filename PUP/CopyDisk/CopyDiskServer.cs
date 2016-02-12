@@ -1,4 +1,6 @@
-﻿using IFS.Logging;
+﻿using IFS.BSP;
+using IFS.Logging;
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -293,7 +295,7 @@ namespace IFS.CopyDisk
                             Log.Write(LogType.Verbose, LogComponent.CopyDisk, "Copydisk client is version {0}, '{1}'", vbIn.Code, vbIn.Herald.ToString());
 
                             // Send the response:
-                            VersionYesNoBlock vbOut = new VersionYesNoBlock(CopyDiskBlock.Version, vbIn.Code, "IFS CopyDisk of 26-Jan-2016!");
+                            VersionYesNoBlock vbOut = new VersionYesNoBlock(CopyDiskBlock.Version, vbIn.Code, "LCM IFS CopyDisk of 26-Jan-2016");
                             channel.Send(Serializer.Serialize(vbOut));
                         }
                         break;
@@ -555,9 +557,7 @@ namespace IFS.CopyDisk
         /// <returns></returns>
         private static string GetPathForDiskImage(string packName)
         {
-            // TODO:
-            // Make this path configurable?
-            return Path.Combine("Disks", packName);
+            return Path.Combine(Configuration.CopyDiskRoot, packName);
         }
 
         private Thread _workerThread;

@@ -12,7 +12,7 @@ namespace IFS
     public class Entrypoint
     {        
         static void Main(string[] args)
-        {                                   
+        {                           
             List<EthernetInterface> ifaces = EthernetInterface.EnumerateDevices();
 
             Console.WriteLine("available interfaces are:");
