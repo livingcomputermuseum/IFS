@@ -20,6 +20,7 @@ namespace IFS.Logging
         DirectoryServices = 0x20,
         PUP = 0x40,
         FTP = 0x80,
+        BreathOfLife = 0x100,
         
         All = 0x7fffffff
     }

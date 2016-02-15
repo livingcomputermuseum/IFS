@@ -1,4 +1,5 @@
-﻿using IFS.CopyDisk;
+﻿using IFS.Boot;
+using IFS.CopyDisk;
 using IFS.FTP;
 using IFS.Transport;
 using System;
@@ -27,13 +28,18 @@ namespace IFS
             PUPProtocolDispatcher.Instance.RegisterProtocol(new PUPProtocolEntry("Gateway Information", 2, ConnectionType.Connectionless, new GatewayInformationProtocol()));
             PUPProtocolDispatcher.Instance.RegisterProtocol(new PUPProtocolEntry("Misc Services", 0x4, ConnectionType.Connectionless, new MiscServicesProtocol()));
             PUPProtocolDispatcher.Instance.RegisterProtocol(new PUPProtocolEntry("Echo", 0x5, ConnectionType.Connectionless, new EchoProtocol()));
+            PUPProtocolDispatcher.Instance.RegisterProtocol(new PUPProtocolEntry("Boot", 0x10, ConnectionType.Connectionless, new BootServerProtocol()));
 
             // RTP/BSP based:            
             PUPProtocolDispatcher.Instance.RegisterProtocol(new PUPProtocolEntry("CopyDisk", 0x15  /* 25B */, ConnectionType.BSP, new CopyDiskServer()));
             PUPProtocolDispatcher.Instance.RegisterProtocol(new PUPProtocolEntry("FTP", 0x3, ConnectionType.BSP, new FTPServer()));
 
+            // Breath Of Life
+            BreathOfLife breathOfLifeServer = new BreathOfLife();
+
+
             // TODO: MAKE THIS CONFIGURABLE.
-            PUPProtocolDispatcher.Instance.RegisterInterface(ifaces[2]);
+            PUPProtocolDispatcher.Instance.RegisterInterface(ifaces[2]);            
 
             while (true)
             {

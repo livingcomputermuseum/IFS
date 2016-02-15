@@ -636,8 +636,6 @@ namespace IFS.BSP
                             }
                             
                             // Nope.  Request another ACK.
-                            // TODO: should probably error out of this if the client never becomes ready again...
-                            RequestClientStats();
                         }
                         
                         //
@@ -671,6 +669,7 @@ namespace IFS.BSP
                                 Log.Write(LogType.Error, LogComponent.BSP, "Client lost more than a window of data, BSP connection is broken.  Aborting.");
                                 SendAbort("Fatal BSP synchronization error.");
                                 BSPManager.DestroyChannel(this);
+                                _outputWindowLock.ExitUpgradeableReadLock();
                                 return;
                             }
 
@@ -684,8 +683,9 @@ namespace IFS.BSP
                             _outputWindow.RemoveRange(0, _outputWindowIndex);
                             _outputWindowIndex = 0;                            
                             _outputWindowLock.ExitWriteLock();
-                            _outputReadyEvent.Set();                            
-                            break;
+                            _outputReadyEvent.Set();          
+                            
+                            // Note: we don't break from the loop here; there may still be PUPs left in _outputWindow that need to be sent.                  
                         }
                     }
                 }
@@ -720,6 +720,10 @@ namespace IFS.BSP
             }            
         }
 
+        /// <summary>
+        /// Waits for an ACK from the client, "pinging" the client periodically.  Will retry a number of times, if no
+        /// ACK is received the channel is shut down.
+        /// </summary>
         private void WaitForAck()
         {
             //

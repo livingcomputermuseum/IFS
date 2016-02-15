@@ -43,7 +43,7 @@ namespace IFS.Transport
     /// <summary>
     /// Defines interface "to the metal" (raw ethernet frames) which may wrap the underlying transport (for example, winpcap)
     /// </summary>
-    public class Ethernet : IPupPacketInterface
+    public class Ethernet : IPupPacketInterface, IRawPacketInterface
     {
         public Ethernet(EthernetInterface iface)
         {
@@ -63,7 +63,6 @@ namespace IFS.Transport
             BeginReceive();
         }
         
-
         public void Send(PUP p)
         {
             //
@@ -123,6 +122,75 @@ namespace IFS.Transport
                 // Log error, this should not happen.
                 Log.Write(LogType.Error, LogComponent.Ethernet, String.Format("PUP destination address {0} is unknown.", p.DestinationPort.Host));
             }
+        }
+
+        public void Send(byte[] data, byte source, byte destination, ushort frameType)
+        {
+            // Build the outgoing data; this is:
+            // 1st word: length of data following
+            // 2nd word: 3mbit destination / source bytes
+            // 3rd word: frame type (PUP)
+            byte[] encapsulatedFrame = new byte[6 + data.Length];
+
+            // 3mbit Packet length
+            encapsulatedFrame[0] = (byte)((data.Length / 2 + 2) >> 8);
+            encapsulatedFrame[1] = (byte)(data.Length / 2 + 2);
+
+            // addressing
+            encapsulatedFrame[2] = destination;
+            encapsulatedFrame[3] = source;
+
+            // frame type
+            encapsulatedFrame[4] = (byte)(frameType >> 8);
+            encapsulatedFrame[5] = (byte)frameType;
+
+            // Actual data
+            data.CopyTo(encapsulatedFrame, 6);
+
+            // Byte swap
+            encapsulatedFrame = ByteSwap(encapsulatedFrame);
+
+            MacAddress destinationMac;
+            if (destination != 0xff)
+            {
+                if (_pupToEthernetMap.ContainsKey(destination))
+                {
+                    //
+                    // Use the existing map.
+                    //
+                    destinationMac = _pupToEthernetMap[destination];
+                }
+                else
+                {
+                    //
+                    // Nothing mapped for this PUP, do our best with it.
+                    //
+                    destinationMac = new MacAddress((UInt48)(_10mbitMACPrefix | destination));
+                }
+            }
+            else
+            {
+                // 3mbit broadcast becomes 10mbit broadcast
+                destinationMac = new MacAddress(_10mbitBroadcast);
+            }
+
+            // Build the outgoing packet; place the source/dest addresses, type field and the PUP data.                
+            EthernetLayer ethernetLayer = new EthernetLayer
+            {
+                Source = _interface.GetMacAddress(),
+                Destination = destinationMac,
+                EtherType = (EthernetType)_3mbitFrameType,
+            };
+
+            PayloadLayer payloadLayer = new PayloadLayer
+            {
+                Data = new Datagram(encapsulatedFrame),
+            };
+
+            PacketBuilder builder = new PacketBuilder(ethernetLayer, payloadLayer);
+
+            // Send it over the 'net!
+            _communicator.SendPacket(builder.Build(DateTime.Now));
         }
 
         private void ReceiveCallback(Packet p)
@@ -291,6 +359,13 @@ namespace IFS.Transport
 
         // The type used for 3mbit frames encapsulated in 10mb frames
         private readonly int _3mbitFrameType = 0xbeef;     // easy to identify, ostensibly unused by anything of any import
+
+        // 5 byte prefix for 3mbit->10mbit addresses when sending raw frames; this is the convention ContrAlto uses.
+        // TODO: this should be configurable.
+        private UInt48 _10mbitMACPrefix = 0x0000aa010200;  // 00-00-AA is the Xerox vendor code, used just to be cute.  
+
+        // 10mbit broadcast address
+        private UInt48 _10mbitBroadcast = (UInt48)0xffffffffffff;
 
     }
 }

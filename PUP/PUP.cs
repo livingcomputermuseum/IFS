@@ -33,6 +33,12 @@ namespace IFS
         InterruptReply = 21,
         AMark = 22,
 
+        // EFTP types
+        EFTPData = 24,
+        EFTPAck = 25,
+        EFTPEnd = 26,
+        EFTPAbort = 27,
+
         // Misc. Services types
         StringTimeRequest = 128,
         StringTimeReply = 129,

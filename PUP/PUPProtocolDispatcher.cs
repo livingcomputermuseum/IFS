@@ -37,7 +37,9 @@ namespace IFS
         {
             // TODO: support multiple interfaces (for gateway routing, for example.)
             // Also, this should not be ethernet-specific.
-            _pupPacketInterface = new Ethernet(i);
+            Ethernet enet = new Ethernet(i);
+            _pupPacketInterface = enet as IPupPacketInterface;
+            _rawPacketInterface = enet as IRawPacketInterface;            
 
             _pupPacketInterface.RegisterReceiveCallback(OnPupReceived);
         }
@@ -61,6 +63,14 @@ namespace IFS
         public void SendPup(PUP p)
         {            
             _pupPacketInterface.Send(p);            
+        }
+
+        public void Send(byte[] data, byte source, byte destination, ushort frameType)
+        {
+            if (_rawPacketInterface != null)
+            {
+                _rawPacketInterface.Send(data, source, destination, frameType);
+            }
         }
 
         private void OnPupReceived(PUP pup)
@@ -116,6 +126,11 @@ namespace IFS
         /// Our interface to a facility that can transmit/receive PUPs
         /// </summary>
         private IPupPacketInterface _pupPacketInterface;
+
+        /// <summary>
+        /// Our interface to a facility that can transmit raw Ethernet frames
+        /// </summary>
+        private IRawPacketInterface _rawPacketInterface;
 
         /// <summary>
         /// Map from socket to protocol implementation

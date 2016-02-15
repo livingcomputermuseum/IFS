@@ -76,7 +76,11 @@ namespace IFS
 
                 case PupType.NameLookupRequest:
                     SendNameLookupReply(p);
-                    break;                
+                    break;
+
+                case PupType.SendBootFileRequest:
+                    SendBootFile(p);
+                    break;           
 
                 default:
                     Log.Write(LogComponent.MiscServices, String.Format("Unhandled misc. protocol {0}", p.Type));
@@ -107,9 +111,7 @@ namespace IFS
         }
 
         private void SendAltoTimeReply(PUP p)
-        {
-            
-
+        {            
             // So the Alto epoch is 1/1/1901.  For the time being to keep things simple we're assuming
             // GMT and no DST at all.  TODO: make this take into account our TZ, etc.
             //
@@ -133,8 +135,6 @@ namespace IFS
             TimeSpan timeSinceAltoEpoch = new TimeSpan(currentTime.Ticks - altoEpoch.Ticks);
 
             UInt32 altoTime = (UInt32)timeSinceAltoEpoch.TotalSeconds;
-
-
 
             // Build the response data
             AltoTime time = new AltoTime();
@@ -236,6 +236,19 @@ namespace IFS
 
                 PUPProtocolDispatcher.Instance.SendPup(errorReply);
             }
+        }
+
+        private void SendBootFile(PUP p)
+        {
+            //
+            // The request PUP contains the file number in the lower-order 16-bits of the pup ID.
+            // Assuming the number is a valid bootfile, we start sending it to the client's port via EFTP.
+            // 
+            uint fileNumber = p.ID & 0xffff;
+
+            Log.Write(LogType.Verbose, LogComponent.MiscServices, "Boot file request is for file {0}.", fileNumber);
+
+
         }
     }
 }

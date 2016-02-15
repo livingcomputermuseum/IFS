@@ -10,6 +10,7 @@ namespace IFS
     {
         Connectionless,     /* echo, name resolution, etc. */
         BSP,                /* FTP, Telnet, CopyDisk, etc. */
+        EFTP,               /* EFTP-based (boot, printing) */
     }    
     
     public struct PUPProtocolEntry
@@ -33,7 +34,7 @@ namespace IFS
         public UInt32 Socket;
 
         /// <summary>
-        /// Indicates the type of connection (connectionless or BSP-based)
+        /// Indicates the type of connection (connectionless, BSP-based or EFTP)
         /// </summary>
         public ConnectionType ConnectionType;
 
