@@ -21,6 +21,8 @@ namespace IFS.Logging
         PUP = 0x40,
         FTP = 0x80,
         BreathOfLife = 0x100,
+        EFTP = 0x200,
+        BootServer = 0x400,
         
         All = 0x7fffffff
     }

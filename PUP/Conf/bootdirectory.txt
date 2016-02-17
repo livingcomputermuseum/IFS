@@ -1,0 +1,64 @@
+﻿# bootdirectory.txt:
+#
+# This file contains a simple mapping from boot number to boot file, one entry per line
+# in the form:
+#  <number(8)> <name>
+#
+# Boot files are expected to reside in the "boot" subdirectory of the IFS root store.
+#
+# The order of the files is based on the order used on authentic Xerox Gateway servers, for example
+# the config listed here: http://xeroxalto.computerhistory.org/Io/Murray/.Brio.txt!1.html
+# 
+
+0		dmt.boot
+1		newos.boot
+2		ftp.boot
+3		scavenger.boot
+4		copydisk.boot
+5		crttest.boot
+6		madtest.boot
+7		chat.boot
+10		netexec.boot
+11		puptest.boot
+12		etherwatch.boot
+13		keytest.boot
+14		calculator.boot
+15		diex.boot
+16		triex.boot
+17		edp.boot
+20		bfstest.boot
+21		gatecontrol.boot
+22		etherload.boot
+24		neptune.boot
+25		what.boot
+40		pupwatch.boot
+
+# past this point are more esoteric things, here because they're cool
+100		mesanetexec.boot
+200		cedarnetexec.boot
+1000	showais.boot
+1001	starwars.boot
+1002	fly.boot
+1003	kal.boot
+1004	pinball.boot
+1005	pool.boot
+1006	mazewar.boot
+1007	trek.boot
+1010	invaders.boot
+1011	astroroids.boot
+1012	astroroids.boot
+1013	clock.boot
+1014	galaxian.boot
+1015	ppong.boot
+1017	messenger.boot
+1020	reversi.boot
+1023	missilecommand.boot
+40000   boggs.boot
+40002   murray.boot
+40003   johnsson.boot
+
+43000   alphamesamesanetexec.boot
+
+
+
+

@@ -63,8 +63,8 @@ namespace IFS
         
         // Alto Boot
         SendBootFileRequest = 164,
-        BootDirectoryRequest = 165,
-        BootDirectoryReply = 166,
+        BootDirectoryRequest = 175,
+        BootDirectoryReply = 176,
 
         // User authentication
         AuthenticateRequest = 168,

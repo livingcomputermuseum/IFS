@@ -27,8 +27,7 @@ namespace IFS
             // Connectionless
             PUPProtocolDispatcher.Instance.RegisterProtocol(new PUPProtocolEntry("Gateway Information", 2, ConnectionType.Connectionless, new GatewayInformationProtocol()));
             PUPProtocolDispatcher.Instance.RegisterProtocol(new PUPProtocolEntry("Misc Services", 0x4, ConnectionType.Connectionless, new MiscServicesProtocol()));
-            PUPProtocolDispatcher.Instance.RegisterProtocol(new PUPProtocolEntry("Echo", 0x5, ConnectionType.Connectionless, new EchoProtocol()));
-            PUPProtocolDispatcher.Instance.RegisterProtocol(new PUPProtocolEntry("Boot", 0x10, ConnectionType.Connectionless, new BootServerProtocol()));
+            PUPProtocolDispatcher.Instance.RegisterProtocol(new PUPProtocolEntry("Echo", 0x5, ConnectionType.Connectionless, new EchoProtocol()));            
 
             // RTP/BSP based:            
             PUPProtocolDispatcher.Instance.RegisterProtocol(new PUPProtocolEntry("CopyDisk", 0x15  /* 25B */, ConnectionType.BSP, new CopyDiskServer()));

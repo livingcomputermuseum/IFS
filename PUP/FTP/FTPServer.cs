@@ -172,6 +172,7 @@ namespace IFS.FTP
                         break;
 
                     case FTPCommand.Enumerate:
+                    case FTPCommand.NewEnumerate:
                         {
                             // Argument to Enumerate is a property list (string).
                             //
@@ -180,7 +181,7 @@ namespace IFS.FTP
 
                             PropertyList pl = new PropertyList(fileSpec);
 
-                            EnumerateFiles(pl);                                                        
+                            EnumerateFiles(pl, command == FTPCommand.NewEnumerate);                                                        
                         }
                         break;
 
@@ -318,7 +319,7 @@ namespace IFS.FTP
         /// Enumerates the files matching the requested file specification.
         /// </summary>
         /// <param name="fileSpec"></param>
-        private void EnumerateFiles(PropertyList fileSpec)
+        private void EnumerateFiles(PropertyList fileSpec, bool newEnumerate)
         {
             string fullPath = BuildAndValidateFilePath(fileSpec);
 
@@ -329,11 +330,29 @@ namespace IFS.FTP
 
             List<PropertyList> files = EnumerateFiles(fullPath);
 
-            // Send each property list to the user
-            foreach(PropertyList matchingFile in files)
-            {                
+
+            if (newEnumerate)
+            {
+                // "New" enumerate: send all property lists concatenated together in a single Here-Is-Property-List
+                // command.
+                StringBuilder sb = new StringBuilder();
+                foreach (PropertyList matchingFile in files)
+                {
+                    sb.Append(matchingFile.ToString());
+                }
+
                 _channel.SendMark((byte)FTPCommand.HereIsPropertyList, false);
-                _channel.Send(Helpers.StringToArray(matchingFile.ToString()));                
+                _channel.Send(Helpers.StringToArray(sb.ToString()));
+            }
+            else
+            {
+                // "Old" enumrate: send each property list to the user in separate Here-Is-Property-List
+                // command.
+                foreach (PropertyList matchingFile in files)
+                {
+                    _channel.SendMark((byte)FTPCommand.HereIsPropertyList, false);
+                    _channel.Send(Helpers.StringToArray(matchingFile.ToString()));
+                }
             }
 
             // End the enumeration.

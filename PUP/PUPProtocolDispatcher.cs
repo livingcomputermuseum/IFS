@@ -1,4 +1,5 @@
 ﻿using IFS.BSP;
+using IFS.EFTP;
 using IFS.Logging;
 using IFS.Transport;
 
@@ -61,8 +62,15 @@ namespace IFS
         }
 
         public void SendPup(PUP p)
-        {            
-            _pupPacketInterface.Send(p);            
+        {
+            // drop every 10th packet for testing
+            _packet++;
+
+           // if ((_packet % 10) != 5)
+            {
+                _pupPacketInterface.Send(p);
+            }
+        
         }
 
         public void Send(byte[] data, byte source, byte destination, ushort frameType)
@@ -71,7 +79,7 @@ namespace IFS
             {
                 _rawPacketInterface.Send(data, source, destination, frameType);
             }
-        }
+        }        
 
         private void OnPupReceived(PUP pup)
         {
@@ -115,10 +123,14 @@ namespace IFS
                 // An established BSP channel, send data to it.
                 BSPManager.RecvData(pup);
             }
+            else if (EFTPManager.ChannelExistsForSocket(pup))
+            {
+                EFTPManager.RecvData(pup);
+            }
             else
             {
                 // Not a protocol we handle; log it.
-                Log.Write(LogType.Normal, LogComponent.PUP, "Unhandled PUP protocol, socket {0}, dropped packet.", pup.DestinationPort.Socket);
+                Log.Write(LogType.Normal, LogComponent.PUP, "Unhandled PUP protocol, source socket {0}, destination socket {1}, type {2}, dropped packet.", pup.SourcePort.Socket, pup.DestinationPort.Socket, pup.Type);
             }            
         }
       
@@ -136,6 +148,8 @@ namespace IFS
         /// Map from socket to protocol implementation
         /// </summary>
         private Dictionary<UInt32, PUPProtocolEntry> _dispatchMap;
+
+        private int _packet;
 
         private static PUPProtocolDispatcher _instance = new PUPProtocolDispatcher();
     }

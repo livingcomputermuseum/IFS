@@ -82,7 +82,9 @@
     <Compile Include="CopyDisk\DiabloPack.cs" />
     <Compile Include="DirectoryServices.cs" />
     <Compile Include="EchoProtocol.cs" />
-    <Compile Include="EFTP\EFTPServer.cs" />
+    <Compile Include="EFTP\EFTPChannel.cs" />
+    <Compile Include="EFTP\EFTPManager.cs" />
+    <Compile Include="EFTP\EFTPSend.cs" />
     <Compile Include="Entrypoint.cs" />
     <Compile Include="FTP\FTPServer.cs" />
     <Compile Include="FTP\PropertyList.cs" />
@@ -98,6 +100,9 @@
     <Compile Include="Transport\PacketInterface.cs" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Conf\bootdirectory.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="Conf\hosts.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

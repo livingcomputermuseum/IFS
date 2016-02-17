@@ -587,7 +587,7 @@ namespace IFS.BSP
                     //
                     // Pull the next PUP off the output queue and send it.
                     //
-                    PUP nextPup = _outputWindow[_outputWindowIndex++];                    
+                    PUP nextPup = _outputWindow[_outputWindowIndex++];
 
                     //
                     // If we've sent as many PUPs to the client as it says it can take,
@@ -606,13 +606,13 @@ namespace IFS.BSP
                     // TODO: rewrite the underlying PUP code so we don't have to completely recreate the PUPs like this, it makes me hurt.
                     //
                     if (nextPup.Type == PupType.Data || nextPup.Type == PupType.AData)
-                    {                        
-                        nextPup = new PUP(bAck ? PupType.AData : PupType.Data, _sendPos, nextPup.DestinationPort, nextPup.SourcePort, nextPup.Contents);
+                    {
+                        _outputWindow[_outputWindowIndex - 1] = nextPup = new PUP(bAck ? PupType.AData : PupType.Data, _sendPos, nextPup.DestinationPort, nextPup.SourcePort, nextPup.Contents);
                     }
                     else if (nextPup.Type == PupType.Mark || nextPup.Type == PupType.AMark)
                     {
-                        nextPup = new PUP(bAck ? PupType.AMark : PupType.Mark, _sendPos, nextPup.DestinationPort, nextPup.SourcePort, nextPup.Contents);
-                    }                    
+                        _outputWindow[_outputWindowIndex - 1] = nextPup = new PUP(bAck ? PupType.AMark : PupType.Mark, _sendPos, nextPup.DestinationPort, nextPup.SourcePort, nextPup.Contents);
+                    }
 
                     //
                     // Send it!
@@ -634,8 +634,9 @@ namespace IFS.BSP
                             {
                                 break;
                             }
-                            
+
                             // Nope.  Request another ACK.
+                            Log.Write(LogType.Verbose, LogComponent.BSP, "Waiting for client to become ready..");
                         }
                         
                         //
@@ -649,15 +650,23 @@ namespace IFS.BSP
                                 _lastClientRecvPos,
                                 _sendPos);
 
+                            Log.Write(LogType.Warning, LogComponent.BSP,
+                                "First position in window is {0}.",
+                                _outputWindow[0].ID);
+
+                            // Require ACKs for all retried packets.
+                            bAck = true;
+
                             //
                             // Move our window index back to the first PUP we missed and start resending from that position.
                             //
                             _outputWindowIndex = 0;
                             while(_outputWindowIndex < _outputWindow.Count)
-                            {                                
+                            {                                             
                                 if (_outputWindow[_outputWindowIndex].ID == _lastClientRecvPos)
                                 {
                                     _sendPos = _outputWindow[_outputWindowIndex].ID;
+                                    Log.Write(LogType.Verbose, LogComponent.BSP, "Resending from position {0}", _sendPos);
                                     break;
                                 }
                                 _outputWindowIndex++;

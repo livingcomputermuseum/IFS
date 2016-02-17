@@ -1,6 +1,10 @@
-﻿using IFS.Logging;
+﻿using IFS.Boot;
+using IFS.EFTP;
+using IFS.Logging;
+
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -80,7 +84,11 @@ namespace IFS
 
                 case PupType.SendBootFileRequest:
                     SendBootFile(p);
-                    break;           
+                    break;
+
+                case PupType.BootDirectoryRequest:
+                    SendBootDirectory(p);
+                    break;      
 
                 default:
                     Log.Write(LogComponent.MiscServices, String.Format("Unhandled misc. protocol {0}", p.Type));
@@ -182,7 +190,7 @@ namespace IFS
                 // NOTE: This is *not* a BCPL string, just the raw characters.
                 byte[] interNetworkName = Helpers.StringToArray(hostName);
                 
-                PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.SourcePort.Socket);
+                PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
                 PUP lookupReply = new PUP(PupType.AddressLookupResponse, p.ID, p.SourcePort, localPort, interNetworkName);
 
                 PUPProtocolDispatcher.Instance.SendPup(lookupReply);
@@ -191,7 +199,7 @@ namespace IFS
             {
                 // Unknown host, send an error reply
                 string errorString = "Unknown host.";
-                PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.SourcePort.Socket);
+                PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
                 PUP errorReply = new PUP(PupType.DirectoryLookupErrorReply, p.ID, p.SourcePort, localPort, Helpers.StringToArray(errorString));
 
                 PUPProtocolDispatcher.Instance.SendPup(errorReply);
@@ -222,7 +230,7 @@ namespace IFS
             {
                 // We found an address, pack the port into the response.
                 PUPPort lookupPort = new PUPPort(address, 0);
-                PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.SourcePort.Socket);
+                PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
                 PUP lookupReply = new PUP(PupType.NameLookupResponse, p.ID, p.SourcePort, localPort, lookupPort.ToArray());
 
                 PUPProtocolDispatcher.Instance.SendPup(lookupReply);
@@ -231,7 +239,7 @@ namespace IFS
             {
                 // Unknown host, send an error reply
                 string errorString = "Unknown host.";
-                PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.SourcePort.Socket);
+                PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
                 PUP errorReply = new PUP(PupType.DirectoryLookupErrorReply, p.ID, p.SourcePort, localPort, Helpers.StringToArray(errorString));
 
                 PUPProtocolDispatcher.Instance.SendPup(errorReply);
@@ -244,11 +252,79 @@ namespace IFS
             // The request PUP contains the file number in the lower-order 16-bits of the pup ID.
             // Assuming the number is a valid bootfile, we start sending it to the client's port via EFTP.
             // 
-            uint fileNumber = p.ID & 0xffff;
+            ushort fileNumber = (ushort)p.ID;
 
             Log.Write(LogType.Verbose, LogComponent.MiscServices, "Boot file request is for file {0}.", fileNumber);
 
+            FileStream bootFile = BootServer.GetStreamForNumber(fileNumber);
+
+            if (bootFile == null)
+            {
+                Log.Write(LogType.Warning, LogComponent.MiscServices, "Boot file {0} does not exist or could not be opened.", fileNumber);
+            }
+            else
+            {
+                // Send the file.
+                EFTPManager.SendFile(p.SourcePort, bootFile);
+            }
+        }
+
+        private void SendBootDirectory(PUP p)
+        {
+            // 
+            // From etherboot.bravo
+            // "Pup ID: if it is in reply to a BootDirRequest, the ID should match the request.
+            // Pup Contents: 1 or more blocks of the following format: A boot file number (the number that goes in the low 16 bits of a 
+            // BootFileRequest Pup), an Alto format date (2 words), a boot file name in BCPL string format."
+            //
+            MemoryStream ms = new MemoryStream(PUP.MAX_PUP_SIZE);
+
+            List<BootFileEntry> bootFiles = BootServer.EnumerateBootFiles();
+
+            foreach(BootFileEntry entry in bootFiles)
+            {
+                BootDirectoryBlock block;
+                block.FileNumber = entry.BootNumber;
+                block.FileDate = 0;
+                block.FileName = new BCPLString(entry.Filename);
+
+                byte[] serialized = Serializer.Serialize(block);
+                
+                //
+                // If this block fits into the current PUP, add it to the stream, otherwise send off the current PUP
+                // and start a new one.
+                // 
+                if (serialized.Length + ms.Length <= PUP.MAX_PUP_SIZE)
+                {
+                    ms.Write(serialized, 0, serialized.Length);
+                }
+                else
+                {
+                    PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
+                    PUP bootDirReply = new PUP(PupType.BootDirectoryReply, p.ID, p.SourcePort, localPort, ms.ToArray());
+                    PUPProtocolDispatcher.Instance.SendPup(bootDirReply);
+
+                    ms.Seek(0, SeekOrigin.Begin);
+                    ms.SetLength(0);
+                }
+            }
+
+            // Shuffle out any remaining data.
+            if (ms.Length > 0)
+            {
+                PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
+                PUP bootDirReply = new PUP(PupType.BootDirectoryReply, p.ID, p.SourcePort, localPort, ms.ToArray());
+                PUPProtocolDispatcher.Instance.SendPup(bootDirReply);
+            }
 
         }
+
+        private struct BootDirectoryBlock
+        {
+            public ushort FileNumber;
+            public UInt32 FileDate;
+            public BCPLString FileName;
+        }
+
     }
 }
