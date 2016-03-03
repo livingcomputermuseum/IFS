@@ -23,6 +23,7 @@ namespace IFS.Logging
         BreathOfLife = 0x100,
         EFTP = 0x200,
         BootServer = 0x400,
+        UDP = 0x800,
         
         All = 0x7fffffff
     }

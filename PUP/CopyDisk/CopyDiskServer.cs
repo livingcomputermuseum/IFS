@@ -411,6 +411,18 @@ namespace IFS.CopyDisk
                         }
                         break;
 
+                    case CopyDiskBlock.HereAreDiskParams:
+                        {
+                            HereAreDiskParamsBFSBlock diskParams = (HereAreDiskParamsBFSBlock)Serializer.Deserialize(data, typeof(HereAreDiskParamsBFSBlock));
+
+                            Log.Write(LogType.Verbose, LogComponent.CopyDisk, "Disk params are: Type {0}, C/H/S {1}/{2}/{3}",
+                                diskParams.DiskType,
+                                diskParams.Cylinders,
+                                diskParams.Heads,
+                                diskParams.Sectors);
+
+                        }
+                        break;
 
                     case CopyDiskBlock.RetrieveDisk:
                     case CopyDiskBlock.StoreDisk:
@@ -524,19 +536,20 @@ namespace IFS.CopyDisk
                                         Log.Write(LogType.Verbose, LogComponent.CopyDisk, "Saving {0}...", _pack.PackName);
                                         _pack.Save(packStream, true /* reverse byte order */);
                                         Log.Write(LogType.Verbose, LogComponent.CopyDisk, "Saved.");
-                                    }
+                                    }                                   
                                 }
                                 catch(Exception e)
                                 {
                                     // Log error, reset state.
-                                    Log.Write(LogType.Error, LogComponent.CopyDisk, "Failed to save pack {0} - {1}", _pack.PackName, e.Message);
-                                }
+                                    Log.Write(LogType.Error, LogComponent.CopyDisk, "Failed to save pack {0} - {1}", _pack.PackName, e.Message);                                    
+                                }                               
                             }                            
                         }
                         break;
 
                     case CopyDiskBlock.SendErrors:
                         {
+                            Log.Write(LogType.Verbose, LogComponent.CopyDisk, "Sending error summary...");
                             // No data in block.  Send list of errors we encountered.  (There should always be none since we're perfect and have no disk errors.)
                             HereAreErrorsBFSBlock errorBlock = new HereAreErrorsBFSBlock(0, 0);
                             channel.Send(Serializer.Serialize(errorBlock));

@@ -5,6 +5,7 @@ using IFS.Transport;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.NetworkInformation;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -13,14 +14,17 @@ namespace IFS
     public class Entrypoint
     {        
         static void Main(string[] args)
-        {                           
+        {                   
+                    
             List<EthernetInterface> ifaces = EthernetInterface.EnumerateDevices();
 
             Console.WriteLine("available interfaces are:");
             foreach(EthernetInterface i in ifaces)
             {
                 Console.WriteLine(String.Format("{0} - address {1}, desc {2} ", i.Name, i.MacAddress, i.Description));
-            }           
+            }
+
+            NetworkInterface[] netfaces = NetworkInterface.GetAllNetworkInterfaces();
 
             // Set up protocols:
 
@@ -38,7 +42,7 @@ namespace IFS
 
 
             // TODO: MAKE THIS CONFIGURABLE.
-            PUPProtocolDispatcher.Instance.RegisterInterface(ifaces[2]);            
+            PUPProtocolDispatcher.Instance.RegisterInterface(netfaces[0].Description);            
 
             while (true)
             {

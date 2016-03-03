@@ -146,6 +146,13 @@ namespace IFS.BSP
                 throw new InvalidOperationException("count + offset must be less than or equal to the length of the buffer being read into.");
             }
 
+            if (count == 0)
+            {
+                // Honor requests to read 0 bytes always, since technically 0 bytes are always available.
+                data = new byte[0];
+                return 0;
+            }
+
             int read = 0;
 
             //
@@ -410,7 +417,7 @@ namespace IFS.BSP
                     }
 
                     // Send the data.
-                    PUP dataPup = new PUP(PupType.Data, _sendPos, _clientConnectionPort, _serverConnectionPort, chunk);
+                    PUP dataPup = new PUP(flush? PupType.AData : PupType.Data, _sendPos, _clientConnectionPort, _serverConnectionPort, chunk);
                     SendDataPup(dataPup);
                 }
             }
@@ -480,9 +487,11 @@ namespace IFS.BSP
             ack.BytesSent = MaxBytes;
             _inputLock.ExitReadLock();
 
-            PUP ackPup = new PUP(PupType.Ack, _recvPos, _clientConnectionPort, _serverConnectionPort, Serializer.Serialize(ack));
+            PUP ackPup = new PUP(PupType.Ack, _recvPos, _clientConnectionPort, _serverConnectionPort, Serializer.Serialize(ack));            
 
             PUPProtocolDispatcher.Instance.SendPup(ackPup);
+
+            Log.Write(LogType.Verbose, LogComponent.BSP, "ACK sent.");
         }
 
         /// <summary>
@@ -591,8 +600,9 @@ namespace IFS.BSP
 
                     //
                     // If we've sent as many PUPs to the client as it says it can take,
+                    // or we've sent all pups currently in the output window,
                     // we need to change the PUP to an AData PUP so we can acknowledge
-                    // acceptance of the entire window we've sent.
+                    // acceptance of the window we've sent.
                     //
                     bool bAck = false;
                     if (_outputWindowIndex >= _clientLimits.MaxPups)
@@ -607,18 +617,20 @@ namespace IFS.BSP
                     //
                     if (nextPup.Type == PupType.Data || nextPup.Type == PupType.AData)
                     {
-                        _outputWindow[_outputWindowIndex - 1] = nextPup = new PUP(bAck ? PupType.AData : PupType.Data, _sendPos, nextPup.DestinationPort, nextPup.SourcePort, nextPup.Contents);
+                        _outputWindow[_outputWindowIndex - 1] = nextPup = new PUP(bAck ? PupType.AData : nextPup.Type, _sendPos, nextPup.DestinationPort, nextPup.SourcePort, nextPup.Contents);
                     }
                     else if (nextPup.Type == PupType.Mark || nextPup.Type == PupType.AMark)
                     {
-                        _outputWindow[_outputWindowIndex - 1] = nextPup = new PUP(bAck ? PupType.AMark : PupType.Mark, _sendPos, nextPup.DestinationPort, nextPup.SourcePort, nextPup.Contents);
+                        _outputWindow[_outputWindowIndex - 1] = nextPup = new PUP(bAck ? PupType.AMark : nextPup.Type, _sendPos, nextPup.DestinationPort, nextPup.SourcePort, nextPup.Contents);
                     }
 
                     //
                     // Send it!
                     //
                     _sendPos += (uint)nextPup.Contents.Length;
-                    PUPProtocolDispatcher.Instance.SendPup(nextPup);                    
+                    PUPProtocolDispatcher.Instance.SendPup(nextPup);
+
+                    Log.Write(LogType.Verbose, LogComponent.BSP, "Sent data PUP.  Current position is {0}, output window count is {1}", _sendPos, _outputWindow.Count);
 
                     //
                     // If we required an ACK, wait for it to arrive so we can confirm client reception of data.

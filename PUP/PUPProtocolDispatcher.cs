@@ -10,6 +10,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 using PcapDotNet.Base;
+using System.Net.NetworkInformation;
 
 namespace IFS
 {   
@@ -34,13 +35,15 @@ namespace IFS
             get { return _instance; }
         }
 
-        public void RegisterInterface(EthernetInterface i)
+        public void RegisterInterface(string description)
         {
             // TODO: support multiple interfaces (for gateway routing, for example.)
-            // Also, this should not be ethernet-specific.
-            Ethernet enet = new Ethernet(i);
-            _pupPacketInterface = enet as IPupPacketInterface;
-            _rawPacketInterface = enet as IRawPacketInterface;            
+            // TODO: support configuration options for backend.
+            //Ethernet enet = new Ethernet(i.Description);
+
+            UDPEncapsulation udp = new UDPEncapsulation(description);
+            _pupPacketInterface = udp as IPupPacketInterface;
+            _rawPacketInterface = udp as IRawPacketInterface;            
 
             _pupPacketInterface.RegisterReceiveCallback(OnPupReceived);
         }

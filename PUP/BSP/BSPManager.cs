@@ -98,6 +98,8 @@ namespace IFS.BSP
                 return;
             }
 
+            Log.Write(LogType.Verbose, LogComponent.BSP, "BSP pup is {0}", p.Type);
+
             switch (p.Type)
             {
                 case PupType.RFC:

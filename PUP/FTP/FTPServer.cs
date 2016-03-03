@@ -153,6 +153,8 @@ namespace IFS.FTP
                 byte[] data = null;
 
                 FTPCommand command = ReadNextCommandWithData(out data);
+
+                Log.Write(LogType.Verbose, LogComponent.FTP, "FTP command is {0}", command);
            
                 //
                 // At this point we should have the entire command, execute it.

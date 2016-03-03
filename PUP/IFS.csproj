@@ -98,6 +98,7 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="PUPProtocolDispatcher.cs" />
     <Compile Include="Transport\PacketInterface.cs" />
+    <Compile Include="Transport\UDP.cs" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Conf\bootdirectory.txt">

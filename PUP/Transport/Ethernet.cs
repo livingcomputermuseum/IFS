@@ -45,9 +45,9 @@ namespace IFS.Transport
     /// </summary>
     public class Ethernet : IPupPacketInterface, IRawPacketInterface
     {
-        public Ethernet(EthernetInterface iface)
+        public Ethernet(string ifaceName)
         {
-            AttachInterface(iface);
+            AttachInterface(ifaceName);
 
             // Set up maps
             _pupToEthernetMap = new Dictionary<byte, MacAddress>(256);
@@ -246,14 +246,14 @@ namespace IFS.Transport
             }
         }
 
-        private void AttachInterface(EthernetInterface iface)
+        private void AttachInterface(string ifaceName)
         {
             _interface = null;
 
             // Find the specified device by name
             foreach (LivePacketDevice device in LivePacketDevice.AllLocalMachine)
             {
-                if (device.Name == iface.Name && device.GetMacAddress() == iface.MacAddress)
+                if (device.Description == ifaceName)
                 {
                     _interface = device;
                     break;
