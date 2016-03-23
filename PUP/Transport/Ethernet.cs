@@ -92,10 +92,7 @@ namespace IFS.Transport
                 encapsulatedFrame[5] = (byte)_pupFrameType;
 
                 // Actual data
-                p.RawData.CopyTo(encapsulatedFrame, 6);
-
-                // Byte swap
-                encapsulatedFrame = ByteSwap(encapsulatedFrame);
+                p.RawData.CopyTo(encapsulatedFrame, 6);                
 
                 MacAddress destinationMac = _pupToEthernetMap[p.DestinationPort.Host];
 
@@ -148,7 +145,7 @@ namespace IFS.Transport
             data.CopyTo(encapsulatedFrame, 6);
 
             // Byte swap
-            encapsulatedFrame = ByteSwap(encapsulatedFrame);
+            // encapsulatedFrame = ByteSwap(encapsulatedFrame);
 
             MacAddress destinationMac;
             if (destination != 0xff)
@@ -199,8 +196,8 @@ namespace IFS.Transport
             // Filter out encapsulated 3mbit frames and look for PUPs, forward them on.
             //
             if ((int)p.Ethernet.EtherType == _3mbitFrameType)
-            {
-                MemoryStream packetStream = ByteSwap(p.Ethernet.Payload.ToMemoryStream());
+            {               
+                MemoryStream packetStream = p.Ethernet.Payload.ToMemoryStream();
 
                 // Read the length prefix (in words), convert to bytes.
                 // Subtract off 2 words for the ethernet header
@@ -310,37 +307,7 @@ namespace IFS.Transport
                 _pupToEthernetMap.Add(p.SourcePort.Host, e.Ethernet.Source);
                 _ethernetToPupMap.Add(e.Ethernet.Source, p.SourcePort.Host);
             }
-        }
-
-        private MemoryStream ByteSwap(MemoryStream input)
-        {
-            byte[] buffer = new byte[input.Length];
-
-            input.Read(buffer, 0, buffer.Length);
-
-            for(int i=0;i<buffer.Length;i+=2)
-            {
-                byte temp = buffer[i];
-                buffer[i] = buffer[i + 1];
-                buffer[i + 1] = temp;
-            }
-
-            input.Position = 0;            
-
-            return new MemoryStream(buffer);
-        }
-
-        private byte[] ByteSwap(byte[] input)
-        {                       
-            for (int i = 0; i < input.Length; i += 2)
-            {
-                byte temp = input[i];
-                input[i] = input[i + 1];
-                input[i + 1] = temp;
-            }
-
-            return input;
-        }
+        }        
 
         /// <summary>
         /// PUP<->Ethernet address map

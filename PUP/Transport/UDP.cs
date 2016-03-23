@@ -23,8 +23,7 @@ namespace IFS.Transport
                 _udpClient = new UdpClient(_udpPort, AddressFamily.InterNetwork);                                                           
                 _udpClient.Client.Blocking = true;                
                 _udpClient.EnableBroadcast = true;
-                _udpClient.MulticastLoopback = false;
-                
+                _udpClient.MulticastLoopback = false;                
 
                 //
                 // Grab the broadcast address for the interface so that we know what broadcast address to use
@@ -116,10 +115,7 @@ namespace IFS.Transport
             encapsulatedFrame[5] = (byte)_pupFrameType;
 
             // Actual data
-            p.RawData.CopyTo(encapsulatedFrame, 6);
-
-            // Byte swap
-            encapsulatedFrame = ByteSwap(encapsulatedFrame);
+            p.RawData.CopyTo(encapsulatedFrame, 6);            
 
             // Send as UDP broadcast.
             // TODO: this could be done without broadcasts if we kept a table mapping IPs to 3mbit MACs.
@@ -152,10 +148,7 @@ namespace IFS.Transport
             encapsulatedFrame[5] = (byte)frameType;
 
             // Actual data
-            data.CopyTo(encapsulatedFrame, 6);
-
-            // Byte swap
-            encapsulatedFrame = ByteSwap(encapsulatedFrame);
+            data.CopyTo(encapsulatedFrame, 6);            
 
             // Send as UDP broadcast.
             // TODO: this could be done without broadcasts if we kept a table mapping IPs to 3mbit MACs.
@@ -231,7 +224,7 @@ namespace IFS.Transport
                 // Drop our own UDP packets.
                 if (!groupEndPoint.Address.Equals(_thisIPAddress))
                 {
-                    Receive(ByteSwap(new System.IO.MemoryStream(data)));
+                    Receive(new System.IO.MemoryStream(data));
                 }
             }
         }
@@ -249,37 +242,7 @@ namespace IFS.Transport
             }
 
             return new IPAddress(broadcastAddress);
-        }        
-
-        private MemoryStream ByteSwap(MemoryStream input)
-        {
-            byte[] buffer = new byte[input.Length];
-
-            input.Read(buffer, 0, buffer.Length);
-
-            for (int i = 0; i < buffer.Length; i += 2)
-            {
-                byte temp = buffer[i];
-                buffer[i] = buffer[i + 1];
-                buffer[i + 1] = temp;
-            }
-
-            input.Position = 0;
-
-            return new MemoryStream(buffer);
-        }
-
-        private byte[] ByteSwap(byte[] input)
-        {
-            for (int i = 0; i < input.Length; i += 2)
-            {
-                byte temp = input[i];
-                input[i] = input[i + 1];
-                input[i + 1] = temp;
-            }
-
-            return input;
-        }
+        }               
        
         // The ethertype used in the encapsulated 3mbit frame
         private readonly ushort _pupFrameType = 512;

@@ -46,12 +46,14 @@
 1007	trek.boot
 1010	invaders.boot
 1011	astroroids.boot
-1012	astroroids.boot
+1012	1012.boot
 1013	clock.boot
 1014	galaxian.boot
 1015	ppong.boot
+1016    1006.boot
 1017	messenger.boot
 1020	reversi.boot
+1021	1000.boot
 1023	missilecommand.boot
 40000   boggs.boot
 40002   murray.boot
