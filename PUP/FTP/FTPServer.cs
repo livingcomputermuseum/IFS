@@ -310,6 +310,11 @@ namespace IFS.FTP
                 return;
             }
 
+            if (AuthenticateUser(fileSpec) == null)
+            {
+                return;                
+            }
+
             List<PropertyList> files = EnumerateFiles(fullPath);
 
 
@@ -351,6 +356,11 @@ namespace IFS.FTP
             string fullPath = BuildAndValidateFilePath(fileSpec);
 
             if (fullPath == null)
+            {
+                return;
+            }
+
+            if (AuthenticateUser(fileSpec) == null)
             {
                 return;
             }
@@ -426,6 +436,25 @@ namespace IFS.FTP
                 return;
             }
 
+            UserToken userToken = AuthenticateUser(fileSpec);
+
+            if (userToken == null)
+            {
+                return;
+            }
+
+            //
+            // Check the privileges of the user.  If the user has write permissions
+            // then we are OK to store.  Otherwise, we must be writing to the user's directory.
+            //
+            string fullFileName = Path.Combine(Configuration.FTPRoot, fullPath);
+            if (userToken.Privileges != IFSPrivileges.ReadWrite &&
+                !IsUserDirectory(userToken, fullFileName))
+            {
+                SendFTPNoResponse(NoCode.AccessDenied, "This account is not allowed to store files here.");
+                return;
+            }
+
             if (newStore)
             {
                 //
@@ -455,8 +484,7 @@ namespace IFS.FTP
 
             //
             // At this point the client should start sending data, so we should start receiving it.            
-            // 
-            string fullFileName = Path.Combine(Configuration.FTPRoot, fullPath);
+            //             
             bool success = true;
             FTPCommand lastMark;
             byte[] buffer;            
@@ -525,7 +553,7 @@ namespace IFS.FTP
         }
 
         /// <summary>
-        /// Deletes the files matching the requested file specification and sends them to the client, one at a time.
+        /// Deletes the files matching the requested file specification, one at a time.
         /// </summary>
         /// <param name="fileSpec"></param>
         private void DeleteFiles(PropertyList fileSpec)
@@ -534,6 +562,25 @@ namespace IFS.FTP
 
             if (fullPath == null)
             {
+                return;
+            }
+
+            UserToken userToken = AuthenticateUser(fileSpec);
+
+            if (userToken == null)
+            {
+                return;
+            }
+
+            //
+            // Check the privileges of the user.  If the user has write permissions
+            // then we are OK to delete.  Otherwise, we must be deleteing files in the user's directory.
+            //
+            string fullFileName = Path.Combine(Configuration.FTPRoot, fullPath);
+            if (userToken.Privileges != IFSPrivileges.ReadWrite &&
+                !IsUserDirectory(userToken, fullFileName))
+            {
+                SendFTPNoResponse(NoCode.AccessDenied, "This account is not allowed to delete files here.");
                 return;
             }
 
@@ -747,6 +794,53 @@ namespace IFS.FTP
             //
             // Looks like we should be OK.
             return relativePath;
+        }
+
+        private UserToken AuthenticateUser(PropertyList fileSpec)
+        {
+            //
+            // If no username is specified then we default to the guest account.
+            //
+            if (!fileSpec.ContainsPropertyValue(KnownPropertyNames.UserName))
+            {
+                return UserToken.Guest;
+            }
+
+            //
+            // Otherwise, we validate the username/password and return the associated token
+            // if successful.
+            // On failure, we send a "No" code back to the client.
+            //
+            string userName = fileSpec.GetPropertyValue(KnownPropertyNames.UserName);
+            string password = String.Empty;
+
+            if (fileSpec.ContainsPropertyValue(KnownPropertyNames.UserPassword))
+            {
+                password = fileSpec.GetPropertyValue(KnownPropertyNames.UserPassword);
+            }
+
+            UserToken user = Authentication.Authenticate(userName, password);
+
+            if (user == null)
+            {
+                SendFTPNoResponse(NoCode.AccessDenied, "Invalid username or password.");
+            }
+
+            return user;
+        }
+
+        /// <summary>
+        /// Checks that the path points to the user's directory.
+        /// For now, this is assumed to be rooted directly under the FTP root, so for user
+        /// "alan", and an FTP root of "c:\ifs\ftp" the path should start with "c:\ifs\ftp\alan".
+        /// </summary>
+        /// <param name="userToken"></param>
+        /// <param name="fullPath"></param>
+        /// <returns></returns>
+        private bool IsUserDirectory(UserToken userToken, string fullPath)
+        {
+            string userDirPath = Path.Combine(Configuration.FTPRoot, userToken.HomeDirectory);
+            return fullPath.StartsWith(userDirPath, StringComparison.OrdinalIgnoreCase);
         }
 
         private void SendFTPResponse(FTPCommand responseCommand, object data)
