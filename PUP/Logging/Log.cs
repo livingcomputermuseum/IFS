@@ -24,7 +24,8 @@ namespace IFS.Logging
         EFTP = 0x200,
         BootServer = 0x400,
         UDP = 0x800,
-        
+
+        Configuration = 0x1000,
         All = 0x7fffffff
     }
 
@@ -48,10 +49,9 @@ namespace IFS.Logging
     public static class Log
     {
         static Log()
-        {
-            // TODO: make configurable
-            _components = LogComponent.All;
-            _type = LogType.All;
+        {            
+            _components = Configuration.LogComponents;
+            _type = Configuration.LogTypes;
 
             //_logStream = new StreamWriter("log.txt");
         }
@@ -62,7 +62,6 @@ namespace IFS.Logging
             set { _components = value; }
         }
 
-#if LOGGING_ENABLED
         /// <summary>
         /// Logs a message without specifying type/severity for terseness;
         /// will not log if Type has been set to None.
@@ -91,18 +90,6 @@ namespace IFS.Logging
                 }
             }
         }
-#else
-        public static void Write(LogComponent component, string message, params object[] args)
-        {
-            
-        }
-
-        public static void Write(LogType type, LogComponent component, string message, params object[] args)
-        {
-
-        }
-
-#endif
 
         private static LogComponent _components;
         private static LogType _type;

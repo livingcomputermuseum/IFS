@@ -77,57 +77,33 @@ namespace IFS.FTP
 
         public byte Code;
         public string Message;
-    }    
+    }       
 
-    public class FTPServer : BSPProtocol
+    public class FTPWorker : BSPWorkerBase
     {
-        /// <summary>
-        /// Called by dispatcher to send incoming data destined for this protocol.
-        /// </summary>
-        /// <param name="p"></param>
-        public override void RecvData(PUP p)
-        {
-            throw new NotImplementedException();
-        }
-
-        public override void InitializeServerForChannel(BSPChannel channel)
-        {
-            // Spawn new worker
-            FTPWorker ftpWorker = new FTPWorker(channel);
-        }        
-    }
-
-    public class FTPWorker
-    {
-        public FTPWorker(BSPChannel channel)
+        public FTPWorker(BSPChannel channel) : base(channel)
         {
             // Register for channel events
             channel.OnDestroy += OnChannelDestroyed;
 
             _running = true;
 
-            _workerThread = new Thread(new ParameterizedThreadStart(FTPWorkerThreadInit));
-            _workerThread.Start(channel);
+            _workerThread = new Thread(new ThreadStart(FTPWorkerThreadInit));
+            _workerThread.Start();
         }
 
-        private void OnChannelDestroyed()
-        {
-            // Tell the thread to exit and give it a short period to do so...
-            _running = false;
-
-            Log.Write(LogType.Verbose, LogComponent.FTP, "Asking FTP worker thread to exit...");
-            _workerThread.Join(1000);
-
-            if (_workerThread.IsAlive)
-            {
-                Logging.Log.Write(LogType.Verbose, LogComponent.FTP, "FTP worker thread did not exit, terminating.");
-                _workerThread.Abort();
-            }
+        public override void Terminate()
+        {            
+            ShutdownWorker();
         }
 
-        private void FTPWorkerThreadInit(object obj)
+        private void OnChannelDestroyed(BSPChannel channel)
         {
-            _channel = (BSPChannel)obj;
+            ShutdownWorker();            
+        }
+
+        private void FTPWorkerThreadInit()
+        {            
             //
             // Run the worker thread.
             // If anything goes wrong, log the exception and tear down the BSP connection.
@@ -142,6 +118,8 @@ namespace IFS.FTP
                 {
                     Log.Write(LogType.Error, LogComponent.FTP, "FTP worker thread terminated with exception '{0}'.", e.Message);
                     _channel.SendAbort("Server encountered an error.");
+
+                    OnExit(this);
                 }
             }
         }
@@ -244,7 +222,9 @@ namespace IFS.FTP
                         Log.Write(LogType.Warning, LogComponent.FTP, "Unhandled FTP command {0}.", command);
                         break;
                 }
-            }                 
+            }
+
+            OnExit(this);
         }
 
         private FTPCommand ReadNextCommandWithData(out byte[] data)
@@ -797,7 +777,22 @@ namespace IFS.FTP
             _channel.SendMark((byte)FTPCommand.EndOfCommand, true);
         }
 
-        private BSPChannel _channel;
+        private void ShutdownWorker()
+        {
+            // Tell the thread to exit and give it a short period to do so...
+            _running = false;
+
+            Log.Write(LogType.Verbose, LogComponent.FTP, "Asking FTP worker thread to exit...");
+            _workerThread.Join(1000);
+
+            if (_workerThread.IsAlive)
+            {
+                Logging.Log.Write(LogType.Verbose, LogComponent.FTP, "FTP worker thread did not exit, terminating.");
+                _workerThread.Abort();
+
+                OnExit(this);
+            }
+        }        
 
         private Thread _workerThread;
         private bool _running;

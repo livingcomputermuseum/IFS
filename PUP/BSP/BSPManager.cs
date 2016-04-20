@@ -15,18 +15,34 @@ namespace IFS.BSP
         public ushort MaxBytes;
         public ushort MaxPups;
         public ushort BytesSent;
-    }
+    }    
 
     public abstract class BSPProtocol : PUPProtocolBase
     {
-        public abstract void InitializeServerForChannel(BSPChannel channel);
+        public abstract void InitializeServerForChannel(BSPChannel channel);       
     }
 
     public enum BSPState
     {
         Unconnected,
         Connected
-    }  
+    }
+
+    public delegate void WorkerExitDelegate(BSPWorkerBase destroyed);
+
+    public abstract class BSPWorkerBase
+    {
+        public BSPWorkerBase(BSPChannel channel)
+        {
+            _channel = channel;
+        }
+
+        public abstract void Terminate();
+                    
+        public WorkerExitDelegate OnExit;
+
+        protected BSPChannel _channel;
+    }
 
     /// <summary>
     /// Manages active BSP channels and creates new ones as necessary, invoking the associated
@@ -47,14 +63,16 @@ namespace IFS.BSP
             _nextSocketID = _startingSocketID;
 
             _activeChannels = new Dictionary<uint, BSPChannel>();
+
+            _workers = new List<BSPWorkerBase>(Configuration.MaxWorkers);
         }
 
         /// <summary>
-        /// Called when a PUP comes in on a known socket and establishes a new BSP channel.
-        /// The associated protocol handler (server) is woken up to service the channel.
+        /// Called when a PUP comes in on a known socket.  Establishes a new BSP channel.
+        /// A worker of the appropriate type is woken up to service the channel.
         /// </summary>
         /// <param name="p"></param>
-        public static void EstablishRendezvous(PUP p, BSPProtocol protocolHandler)
+        public static void EstablishRendezvous(PUP p, Type workerType)
         {
             if (p.Type != PupType.RFC)
             {
@@ -63,12 +81,13 @@ namespace IFS.BSP
             }
             
             UInt32 socketID = GetNextSocketID();
-            BSPChannel newChannel = new BSPChannel(p, socketID, protocolHandler);
-            _activeChannels.Add(socketID, newChannel);          
+            BSPChannel newChannel = new BSPChannel(p, socketID);
+            newChannel.OnDestroy += OnChannelDestroyed;
+            _activeChannels.Add(socketID, newChannel); 
 
             //
-            // Initialize the server for this protocol.
-            protocolHandler.InitializeServerForChannel(newChannel);
+            // Initialize the worker for this channel.
+            InitializeWorkerForChannel(newChannel, workerType);
 
             // Send RFC response to complete the rendezvous.
 
@@ -172,8 +191,14 @@ namespace IFS.BSP
         /// <param name="channel"></param>
         public static void DestroyChannel(BSPChannel channel)
         {
+            // Tell the channel to shut down.  It will in turn
+            // notify us when that is complete and we will remove
+            // our references to it.  (See OnChannelDestroyed.)
             channel.Destroy();
+        }
 
+        public static void OnChannelDestroyed(BSPChannel channel)
+        {
             _activeChannels.Remove(channel.ServerPort.Socket);
         }
 
@@ -218,6 +243,40 @@ namespace IFS.BSP
             return next;
         }
 
+        private static void InitializeWorkerForChannel(BSPChannel channel, Type workerType)
+        {
+            if (_workers.Count < Configuration.MaxWorkers)
+            {
+                // Spawn new worker, which starts it running.
+                // It must be a subclass of BSPWorkerBase or this will throw.
+                BSPWorkerBase worker = (BSPWorkerBase)Activator.CreateInstance(workerType, new object[] { channel });
+                
+                worker.OnExit += OnWorkerExit;
+                _workers.Add(worker);
+            }
+            else
+            {
+                // TODO: send back "server full" repsonse of some sort.
+            }
+        }        
+
+        public static int WorkerCount
+        {
+            get
+            {
+                return _workers.Count();
+            }
+        }
+
+        private static void OnWorkerExit(BSPWorkerBase destroyed)
+        {            
+            if (_workers.Contains(destroyed))
+            {
+                _workers.Remove(destroyed);
+            }
+        }
+
+        private static List<BSPWorkerBase> _workers;
 
         /// <summary>
         /// Map from socket address to BSP channel

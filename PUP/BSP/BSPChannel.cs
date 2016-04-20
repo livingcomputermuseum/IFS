@@ -9,6 +9,8 @@ using System.Threading.Tasks;
 
 namespace IFS.BSP
 {
+    public delegate void BSPChannelDestroyDelegate(BSPChannel channel);
+
     /// <summary>
     /// Provides functionality for maintaining/terminating BSP connections, and the transfer of data
     /// across said connection.
@@ -19,7 +21,7 @@ namespace IFS.BSP
     /// </summary>
     public class BSPChannel
     {
-        public BSPChannel(PUP rfcPup, UInt32 socketID, BSPProtocol protocolHandler)
+        public BSPChannel(PUP rfcPup, UInt32 socketID)
         {
             _inputLock = new ReaderWriterLockSlim();
             _outputLock = new ReaderWriterLockSlim();
@@ -35,7 +37,7 @@ namespace IFS.BSP
             _outputWindow = new List<PUP>(16);
             _outputWindowLock = new ReaderWriterLockSlim();
 
-            _protocolHandler = protocolHandler;
+            _destroyed = false;
 
             // Init IDs, etc. based on RFC PUP
             _lastClientRecvPos = _startPos = _recvPos = _sendPos = rfcPup.ID;
@@ -63,11 +65,9 @@ namespace IFS.BSP
             // Create our consumer thread for output and kick it off.
             _consumerThread = new Thread(OutputConsumerThread);
             _consumerThread.Start();
-        }
+        }        
 
-        public delegate void DestroyDelegate();
-
-        public DestroyDelegate OnDestroy;
+        public BSPChannelDestroyDelegate OnDestroy;
 
         /// <summary>
         /// The port we use to talk to the client.
@@ -98,13 +98,10 @@ namespace IFS.BSP
         /// the channel has been destroyed.
         /// </summary>
         public void Destroy()
-        {         
-            _consumerThread.Abort();
-
-            if (OnDestroy != null)
-            {
-                OnDestroy();
-            }
+        {
+            _destroyed = true;
+            _consumerThread.Abort();            
+            OnDestroy(this);            
         }
 
         /// <summary>
@@ -146,7 +143,7 @@ namespace IFS.BSP
                 throw new InvalidOperationException("count + offset must be less than or equal to the length of the buffer being read into.");
             }
 
-            if (count == 0)
+            if (count == 0 || _destroyed)
             {
                 // Honor requests to read 0 bytes always, since technically 0 bytes are always available.
                 data = new byte[0];
@@ -210,7 +207,9 @@ namespace IFS.BSP
                         Log.Write(LogType.Error, LogComponent.BSP, "Timed out waiting for data on read, aborting connection.");
                         // We timed out waiting for data, abort the connection.
                         SendAbort("Timeout on read.");
-                        BSPManager.DestroyChannel(this);
+                        Destroy();
+                        read = 0;                        
+                        break;
                     }
                 }
             }
@@ -301,7 +300,7 @@ namespace IFS.BSP
                     Log.Write(LogType.Error, LogComponent.BSP, "Mark PUP must be 1 byte in length.");
 
                     SendAbort("Mark PUP must be 1 byte in length.");
-                    BSPManager.DestroyChannel(this);
+                    Destroy();
                     return;
                 }
             }
@@ -396,6 +395,11 @@ namespace IFS.BSP
                 throw new InvalidOperationException("Length must be less than or equal to the size of data.");
             }
 
+            if (_destroyed)
+            {
+                return;
+            }
+
             // Add output data to output queue.
             // Again, this is really inefficient
             for (int i = 0; i < length; i++)
@@ -429,6 +433,11 @@ namespace IFS.BSP
         /// <param name="message"></param>
         public void SendAbort(string message)
         {
+            if (_destroyed)
+            {
+                return;
+            }
+
             PUP abortPup = new PUP(PupType.Abort, _startPos, _clientConnectionPort, _serverConnectionPort, Helpers.StringToArray(message));
 
             //
@@ -445,6 +454,11 @@ namespace IFS.BSP
         /// <param name="ack"></param>
         public void SendMark(byte markType, bool ack)
         {
+            if (_destroyed)
+            {
+                return;
+            }
+
             PUP markPup = new PUP(ack ? PupType.AMark : PupType.Mark, _sendPos, _clientConnectionPort, _serverConnectionPort, new byte[] { markType });
 
             // Send it.         
@@ -689,7 +703,7 @@ namespace IFS.BSP
                                 // Something bad has happened and we don't have that PUP anymore...
                                 Log.Write(LogType.Error, LogComponent.BSP, "Client lost more than a window of data, BSP connection is broken.  Aborting.");
                                 SendAbort("Fatal BSP synchronization error.");
-                                BSPManager.DestroyChannel(this);
+                                Destroy();
                                 _outputWindowLock.ExitUpgradeableReadLock();
                                 return;
                             }
@@ -769,11 +783,9 @@ namespace IFS.BSP
             {
                 Log.Write(LogType.Error, LogComponent.BSP, "Timeout waiting for ACK, aborting connection.");
                 SendAbort("Client unresponsive.");
-                BSPManager.DestroyChannel(this);
+                Destroy();
             }
-        }    
-
-        private BSPProtocol _protocolHandler;
+        }            
 
         // The byte positions for the input and output streams
         private UInt32 _recvPos;
@@ -785,6 +797,8 @@ namespace IFS.BSP
 
         private BSPAck _clientLimits;               // The stats from the last ACK we got from the client.        
         private uint _lastClientRecvPos;            // The client's receive position, as indicated by the last ACK pup received.
+
+        private bool _destroyed;                    // Set when the channel has been closed.
 
         private ReaderWriterLockSlim _inputLock;
         private AutoResetEvent _inputWriteEvent;

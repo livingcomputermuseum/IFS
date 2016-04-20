@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 
 using PcapDotNet.Base;
 using System.Net.NetworkInformation;
+using PcapDotNet.Core;
 
 namespace IFS
 {   
@@ -35,16 +36,21 @@ namespace IFS
             get { return _instance; }
         }
 
-        public void RegisterInterface(string description)
+        public void RegisterRAWInterface(LivePacketDevice iface)
         {
-            // TODO: support multiple interfaces (for gateway routing, for example.)
-            // TODO: support configuration options for backend.
-            //Ethernet enet = new Ethernet(i.Description);
+            Ethernet enet = new Ethernet(iface);
 
-            UDPEncapsulation udp = new UDPEncapsulation(description);
-            _pupPacketInterface = udp as IPupPacketInterface;
-            _rawPacketInterface = udp as IRawPacketInterface;            
+            _pupPacketInterface = enet; 
+            _rawPacketInterface = enet;
+            _pupPacketInterface.RegisterReceiveCallback(OnPupReceived);
+        }
 
+        public void RegisterUDPInterface(NetworkInterface iface)
+        {
+            UDPEncapsulation udp = new UDPEncapsulation(iface);
+
+            _pupPacketInterface = udp;
+            _rawPacketInterface = udp;
             _pupPacketInterface.RegisterReceiveCallback(OnPupReceived);
         }
 
@@ -118,7 +124,7 @@ namespace IFS
                     Log.Write(LogType.Verbose, LogComponent.PUP, "Dispatching PUP (source {0}, dest {1}) to BSP protocol for {0}.", pup.SourcePort, pup.DestinationPort, entry.FriendlyName);
                     //entry.ProtocolImplementation.RecvData(pup);
 
-                    BSPManager.EstablishRendezvous(pup, (BSPProtocol)entry.ProtocolImplementation);
+                    BSPManager.EstablishRendezvous(pup, entry.WorkerType);
                 }
             }
             else if (BSPManager.ChannelExistsForSocket(pup))

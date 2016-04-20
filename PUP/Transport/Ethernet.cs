@@ -11,43 +11,19 @@ using PcapDotNet.Packets;
 using PcapDotNet.Packets.Ethernet;
 using IFS.Logging;
 using System.IO;
+using System.Net.NetworkInformation;
+using System.Threading;
 
 namespace IFS.Transport
 {
-    public struct EthernetInterface
-    {
-        public EthernetInterface(string name, string description, MacAddress macAddress)
-        {
-            Name = name;
-            Description = description;
-            MacAddress = macAddress;
-        }
-
-        public static List<EthernetInterface> EnumerateDevices()
-        {
-            List<EthernetInterface> interfaces = new List<EthernetInterface>();
-
-            foreach (LivePacketDevice device in LivePacketDevice.AllLocalMachine)
-            {
-                interfaces.Add(new EthernetInterface(device.Name, device.Description, device.GetMacAddress()));
-            }
-
-            return interfaces;
-        }
-
-        public string       Name;
-        public string       Description;
-        public MacAddress   MacAddress;
-    }
-
     /// <summary>
     /// Defines interface "to the metal" (raw ethernet frames) which may wrap the underlying transport (for example, winpcap)
     /// </summary>
     public class Ethernet : IPupPacketInterface, IRawPacketInterface
     {
-        public Ethernet(string ifaceName)
+        public Ethernet(LivePacketDevice iface)
         {
-            AttachInterface(ifaceName);
+            _interface = iface;
 
             // Set up maps
             _pupToEthernetMap = new Dictionary<byte, MacAddress>(256);
@@ -60,7 +36,10 @@ namespace IFS.Transport
 
             // Now that we have a callback we can start receiving stuff.
             Open(false /* not promiscuous */, int.MaxValue);
-            BeginReceive();
+
+            // Kick off the receiver thread, this will never return or exit.
+            Thread receiveThread = new Thread(new ThreadStart(BeginReceive));
+            receiveThread.Start();
         }
         
         public void Send(PUP p)
@@ -241,27 +220,7 @@ namespace IFS.Transport
                 // Not a PUP, Discard the packet.  We will not log this, so as to keep noise down. 
                 //Log.Write(LogLevel.DroppedPacket, "Not a PUP.  Dropping.");
             }
-        }
-
-        private void AttachInterface(string ifaceName)
-        {
-            _interface = null;
-
-            // Find the specified device by name
-            foreach (LivePacketDevice device in LivePacketDevice.AllLocalMachine)
-            {
-                if (device.Description == ifaceName)
-                {
-                    _interface = device;
-                    break;
-                }
-            }
-
-            if (_interface == null)
-            {
-                throw new InvalidOperationException("Requested interface not found.");
-            }
-        }
+        }       
 
         private void Open(bool promiscuous, int timeout)
         {

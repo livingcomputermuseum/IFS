@@ -191,84 +191,60 @@ namespace IFS.CopyDisk
 
         public ushort Length;
         public ushort Command;
-    }
+    }   
 
-    public class CopyDiskServer : BSPProtocol
+    public class CopyDiskWorker : BSPWorkerBase
     {
-        /// <summary>
-        /// Called by dispatcher to send incoming data destined for this protocol.
-        /// </summary>
-        /// <param name="p"></param>
-        public override void RecvData(PUP p)
-        {
-            throw new NotImplementedException();
-        }
-
-        public override void InitializeServerForChannel(BSPChannel channel)
-        {
-            // Spawn new worker
-            // TODO: keep track of workers to allow clean shutdown, management, etc.
-            CopyDiskWorker worker = new CopyDiskWorker(channel);
-        }
-    }
-
-    public class CopyDiskWorker
-    {
-        public CopyDiskWorker(BSPChannel channel)
+        public CopyDiskWorker(BSPChannel channel) : base(channel)
         {
             // Register for channel events
             channel.OnDestroy += OnChannelDestroyed;
 
             _running = true;
 
-            _workerThread = new Thread(new ParameterizedThreadStart(CopyDiskWorkerThreadInit));
-            _workerThread.Start(channel);            
+            _workerThread = new Thread(new ThreadStart(CopyDiskWorkerThreadInit));
+            _workerThread.Start();            
         }
 
-        private void OnChannelDestroyed()
+        public override void Terminate()
         {
-            // Tell the thread to exit and give it a short period to do so...
-            _running = false;
-
-            Log.Write(LogType.Verbose, LogComponent.CopyDisk, "Asking CopyDisk worker thread to exit...");
-            _workerThread.Join(1000);
-
-            if (_workerThread.IsAlive)
-            {
-                Logging.Log.Write(LogType.Verbose, LogComponent.CopyDisk, "CopyDisk worker thread did not exit, terminating.");
-                _workerThread.Abort();
-            }
+            ShutdownWorker();
         }
 
-        private void CopyDiskWorkerThreadInit(object obj)
+        private void OnChannelDestroyed(BSPChannel channel)
         {
-            BSPChannel channel = (BSPChannel)obj;
+            ShutdownWorker();
+        }
 
+        private void CopyDiskWorkerThreadInit()
+        {            
             //
             // Run the worker thread.
             // If anything goes wrong, log the exception and tear down the BSP connection.
             //
             try
             {
-                CopyDiskWorkerThread(channel);
+                CopyDiskWorkerThread();
             }
             catch(Exception e)
             {
                 if (!(e is ThreadAbortException))
                 {
                     Logging.Log.Write(LogType.Error, LogComponent.CopyDisk, "CopyDisk worker thread terminated with exception '{0}'.", e.Message);
-                    channel.SendAbort("Server encountered an error.");
+                    _channel.SendAbort("Server encountered an error.");
+
+                    OnExit(this);
                 }
             }
         }
 
-        private void CopyDiskWorkerThread(BSPChannel channel)
+        private void CopyDiskWorkerThread()
         {            
             // TODO: enforce state (i.e. reject out-of-order block types.)
             while (_running)
             {
                 // Retrieve length of this block (in bytes):
-                int length = channel.ReadUShort() * 2;
+                int length = _channel.ReadUShort() * 2;
 
                 // Sanity check that length is a reasonable value.                
                 if (length > 2048)
@@ -278,11 +254,11 @@ namespace IFS.CopyDisk
                 }
 
                 // Retrieve type            
-                CopyDiskBlock blockType = (CopyDiskBlock)channel.ReadUShort();
+                CopyDiskBlock blockType = (CopyDiskBlock)_channel.ReadUShort();
 
                 // Read rest of block starting at offset 4 (so deserialization works)              
                 byte[] data = new byte[length];
-                channel.Read(ref data, data.Length - 4, 4);
+                _channel.Read(ref data, data.Length - 4, 4);
 
                 Log.Write(LogType.Verbose, LogComponent.CopyDisk, "Copydisk block type is {0}", blockType);
 
@@ -296,7 +272,7 @@ namespace IFS.CopyDisk
 
                             // Send the response:
                             VersionYesNoBlock vbOut = new VersionYesNoBlock(CopyDiskBlock.Version, vbIn.Code, "LCM IFS CopyDisk of 26-Jan-2016");
-                            channel.Send(Serializer.Serialize(vbOut));
+                            _channel.Send(Serializer.Serialize(vbOut));
                         }
                         break;
 
@@ -318,7 +294,7 @@ namespace IFS.CopyDisk
                             // Send a "Yes" response back.
                             //
                             VersionYesNoBlock yes = new VersionYesNoBlock(CopyDiskBlock.Yes, 0, "Come on in, the water's fine.");
-                            channel.Send(Serializer.Serialize(yes));
+                            _channel.Send(Serializer.Serialize(yes));
                         }
                         break;
 
@@ -342,7 +318,7 @@ namespace IFS.CopyDisk
                             {
                                 // Invalid name, return No reponse.
                                 VersionYesNoBlock no = new VersionYesNoBlock(CopyDiskBlock.No, (ushort)NoCode.UnitNotReady, "Invalid unit name.");
-                                channel.Send(Serializer.Serialize(no));
+                                _channel.Send(Serializer.Serialize(no));
                             }
                             else
                             {
@@ -361,14 +337,14 @@ namespace IFS.CopyDisk
                                     // Send a "HereAreDiskParams" response indicating success.
                                     //
                                     HereAreDiskParamsBFSBlock diskParams = new HereAreDiskParamsBFSBlock(_pack.Geometry);
-                                    channel.Send(Serializer.Serialize(diskParams));
+                                    _channel.Send(Serializer.Serialize(diskParams));
                                 }
                                 catch
                                 {
                                     // If we fail for any reason, return a "No" response.
                                     // TODO: can we be more helpful here?
                                     VersionYesNoBlock no = new VersionYesNoBlock(CopyDiskBlock.No, (ushort)NoCode.UnitNotReady, "Image could not be opened.");
-                                    channel.Send(Serializer.Serialize(no));
+                                    _channel.Send(Serializer.Serialize(no));
                                 }
                             }
                         }
@@ -391,7 +367,7 @@ namespace IFS.CopyDisk
                             {
                                 // Invalid name, return No reponse.
                                 VersionYesNoBlock no = new VersionYesNoBlock(CopyDiskBlock.No, (ushort)NoCode.UnitNotReady, "Invalid unit name or image already exists.");
-                                channel.Send(Serializer.Serialize(no));
+                                _channel.Send(Serializer.Serialize(no));
                             }
                             else
                             {
@@ -406,7 +382,7 @@ namespace IFS.CopyDisk
                                 // Send a "HereAreDiskParams" response indicating success.
                                 //
                                 HereAreDiskParamsBFSBlock diskParams = new HereAreDiskParamsBFSBlock(_pack.Geometry);
-                                channel.Send(Serializer.Serialize(diskParams));
+                                _channel.Send(Serializer.Serialize(diskParams));
                             }
                         }
                         break;
@@ -440,13 +416,13 @@ namespace IFS.CopyDisk
                                 _endAddress > _pack.MaxAddress)
                             {
                                 VersionYesNoBlock no = new VersionYesNoBlock(CopyDiskBlock.No, (ushort)NoCode.UnknownCommand, "Transfer parameters are invalid.");
-                                channel.Send(Serializer.Serialize(no));
+                                _channel.Send(Serializer.Serialize(no));
                             }
                             else
                             {
                                 // We're OK.  Save the parameters and send a Yes response.
                                 VersionYesNoBlock yes = new VersionYesNoBlock(CopyDiskBlock.Yes, 0, "You are cleared for launch.");
-                                channel.Send(Serializer.Serialize(yes));
+                                _channel.Send(Serializer.Serialize(yes));
 
                                 //
                                 // And send the requested range of pages if this is a Retrieve operation
@@ -458,7 +434,7 @@ namespace IFS.CopyDisk
                                     {
                                         DiabloDiskSector sector = _pack.GetSector(i);
                                         HereIsDiskPageBlock block = new HereIsDiskPageBlock(sector.Header, sector.Label, sector.Data);
-                                        channel.Send(Serializer.Serialize(block), false /* do not flush */);
+                                        _channel.Send(Serializer.Serialize(block), false /* do not flush */);
 
                                         if ((i % 100) == 0)
                                         {
@@ -468,7 +444,7 @@ namespace IFS.CopyDisk
 
                                     // Send "EndOfTransfer" block to finish the transfer.
                                     EndOfTransferBlock endTransfer = new EndOfTransferBlock(0);
-                                    channel.Send(Serializer.Serialize(endTransfer));
+                                    _channel.Send(Serializer.Serialize(endTransfer));
 
                                     Log.Write(LogType.Verbose, LogComponent.CopyDisk, "Send done.");
                                 }
@@ -484,7 +460,7 @@ namespace IFS.CopyDisk
                         {
                             if (_currentAddress > _endAddress)
                             {
-                                channel.SendAbort("Invalid address for page.");
+                                _channel.SendAbort("Invalid address for page.");
                                 _running = false;
                                 break;
                             }
@@ -552,7 +528,7 @@ namespace IFS.CopyDisk
                             Log.Write(LogType.Verbose, LogComponent.CopyDisk, "Sending error summary...");
                             // No data in block.  Send list of errors we encountered.  (There should always be none since we're perfect and have no disk errors.)
                             HereAreErrorsBFSBlock errorBlock = new HereAreErrorsBFSBlock(0, 0);
-                            channel.Send(Serializer.Serialize(errorBlock));
+                            _channel.Send(Serializer.Serialize(errorBlock));
                         }
                         break;
 
@@ -560,8 +536,33 @@ namespace IFS.CopyDisk
                         Log.Write(LogType.Warning, LogComponent.CopyDisk, "Unhandled CopyDisk block {0}", blockType);
                         break;
                 }
-            }                                   
+            }
+
+            if (OnExit != null)
+            {
+                OnExit(this);
+            }
         }        
+
+        private void ShutdownWorker()
+        {
+            // Tell the thread to exit and give it a short period to do so...
+            _running = false;
+
+            Log.Write(LogType.Verbose, LogComponent.CopyDisk, "Asking CopyDisk worker thread to exit...");
+            _workerThread.Join(1000);
+
+            if (_workerThread.IsAlive)
+            {
+                Logging.Log.Write(LogType.Verbose, LogComponent.CopyDisk, "CopyDisk worker thread did not exit, terminating.");
+                _workerThread.Abort();
+
+                if (OnExit != null)
+                {
+                    OnExit(this);
+                }
+            }            
+        }
 
         /// <summary>
         /// Builds a relative path to the directory that holds the disk images.

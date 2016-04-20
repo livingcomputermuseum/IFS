@@ -21,6 +21,16 @@ namespace IFS
             Socket = socket;
             ConnectionType = connectionType;
             ProtocolImplementation = implementation;
+            WorkerType = null;
+        }
+
+        public PUPProtocolEntry(string friendlyName, UInt32 socket, ConnectionType connectionType, Type workerType)
+        {
+            FriendlyName = friendlyName;
+            Socket = socket;
+            ConnectionType = connectionType;
+            WorkerType = workerType;
+            ProtocolImplementation = null;
         }
 
         /// <summary>
@@ -39,6 +49,8 @@ namespace IFS
         public ConnectionType ConnectionType;
 
         public PUPProtocolBase ProtocolImplementation;
+
+        public Type WorkerType;
     }
 
     /// <summary>

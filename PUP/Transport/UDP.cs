@@ -15,7 +15,7 @@ namespace IFS.Transport
     /// </summary>
     public class UDPEncapsulation : IPupPacketInterface, IRawPacketInterface
     {
-        public UDPEncapsulation(string interfaceName)
+        public UDPEncapsulation(NetworkInterface iface)
         {
             // Try to set up UDP client.
             try
@@ -23,28 +23,13 @@ namespace IFS.Transport
                 _udpClient = new UdpClient(_udpPort, AddressFamily.InterNetwork);                                                           
                 _udpClient.Client.Blocking = true;                
                 _udpClient.EnableBroadcast = true;
-                _udpClient.MulticastLoopback = false;                
+                _udpClient.MulticastLoopback = false;
 
                 //
                 // Grab the broadcast address for the interface so that we know what broadcast address to use
                 // for our UDP datagrams.
-                //
-                NetworkInterface[] nics = NetworkInterface.GetAllNetworkInterfaces();
-
-                IPInterfaceProperties props = null;
-                foreach (NetworkInterface nic in nics)
-                {
-                    if (nic.Description.ToLowerInvariant() == interfaceName.ToLowerInvariant())
-                    {                        
-                        props = nic.GetIPProperties();
-                        break;
-                    }
-                }
-
-                if (props == null)
-                {
-                    throw new InvalidOperationException(String.Format("No interface matching description '{0}' was found.", interfaceName));
-                }                
+                //                
+                IPInterfaceProperties props = iface.GetIPProperties();                
 
                 foreach (UnicastIPAddressInformation unicast in props.UnicastAddresses)
                 {
@@ -60,16 +45,16 @@ namespace IFS.Transport
 
                 if (_broadcastEndpoint == null)
                 {
-                    throw new InvalidOperationException(String.Format("No IPV4 network information was found for interface '{0}'.", interfaceName));
+                    throw new InvalidOperationException(String.Format("No IPV4 network information was found for interface '{0}'.", iface.Name));
                 }
 
             }
             catch (Exception e)
             {
                 Log.Write(LogType.Error, LogComponent.UDP,
-                    "Error configuring UDP socket {0} for use with ContrAlto on interface {1}.  Ensure that the selected network interface is valid, configured properly, and that nothing else is using this port.",
+                    "Error configuring UDP socket {0} for use with IFS on interface {1}.  Ensure that the selected network interface is valid, configured properly, and that nothing else is using this port.",
                     _udpPort,
-                    interfaceName);
+                    iface.Name);
 
                 Log.Write(LogType.Error, LogComponent.UDP,
                     "Error was '{0}'.",
