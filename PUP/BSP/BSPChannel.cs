@@ -508,6 +508,20 @@ namespace IFS.BSP
             Log.Write(LogType.Verbose, LogComponent.BSP, "ACK sent.");
         }
 
+        public void RecvError(PUP errorPup)
+        {
+            // For now, just log this.
+            Log.Write(LogType.Error, LogComponent.BSP,
+                "Error from client, unhandled.");
+        }
+
+        public void RecvInterrupt(PUP interruptPup)
+        {
+            // For now, just log this.  No IFS protcols yet implemented require use of interrupts.
+            Log.Write(LogType.Error, LogComponent.BSP,
+                "Interrupt from client, unhandled.");
+        }
+
         /// <summary>
         /// Sends a PUP.  Will block if client is unable to receive data.  If timeouts expire, channel will be shut down.
         /// </summary>

@@ -17,17 +17,6 @@ namespace IFS.BSP
         public ushort BytesSent;
     }    
 
-    public abstract class BSPProtocol : PUPProtocolBase
-    {
-        public abstract void InitializeServerForChannel(BSPChannel channel);       
-    }
-
-    public enum BSPState
-    {
-        Unconnected,
-        Connected
-    }
-
     public delegate void WorkerExitDelegate(BSPWorkerBase destroyed);
 
     public abstract class BSPWorkerBase
@@ -166,6 +155,18 @@ namespace IFS.BSP
                         Log.Write(LogType.Warning, LogComponent.RTP, String.Format("BSP aborted, message: '{0}'", abortMessage));
 
                         DestroyChannel(channel);
+                    }
+                    break;
+
+                case PupType.Error:
+                    {
+                        channel.RecvError(p);
+                    }
+                    break;
+
+                case PupType.Interrupt:
+                    {
+                        channel.RecvInterrupt(p);
                     }
                     break;
 

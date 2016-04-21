@@ -839,6 +839,12 @@ namespace IFS.FTP
         /// <returns></returns>
         private bool IsUserDirectory(UserToken userToken, string fullPath)
         {
+            if (string.IsNullOrEmpty(userToken.HomeDirectory))
+            {
+                // No home directory, so by default this cannot be the user's home directory.
+                return false;
+            }
+
             string userDirPath = Path.Combine(Configuration.FTPRoot, userToken.HomeDirectory);
             return fullPath.StartsWith(userDirPath, StringComparison.OrdinalIgnoreCase);
         }

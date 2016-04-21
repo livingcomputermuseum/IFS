@@ -34,6 +34,10 @@ namespace IFS.CopyDisk
         UnitWriteProtected = 2,
         OverwriteNotAllowed = 3,
         UnknownCommand = 4,
+        IllegalUserName = 16,
+        IllegalOrIncorrectPassword = 17,
+        IllegalConnectName = 18,
+        IllegalConnectPassword = 19,
     }
 
     struct VersionYesNoBlock
@@ -280,21 +284,30 @@ namespace IFS.CopyDisk
                         {
                             LoginBlock login = (LoginBlock)Serializer.Deserialize(data, typeof(LoginBlock));
 
-                            Log.Write(LogType.Verbose, LogComponent.CopyDisk, "Login is for user {0}, password {1}, connection {2}, connection password {3}.",
+                            Log.Write(LogType.Verbose, LogComponent.CopyDisk, "Login is for user '{0}', password '{1}', connection '{2}', connection password '{3}'.",
                                 login.UserName,
                                 login.UserPassword,
                                 login.ConnName,
                                 login.ConnPassword);
 
-                            // 
-                            // TODO: for now we allow anyone in with any username and password, this needs to be fixed once
-                            // an authentication mechanism is set up.
-                            //
+                            _userToken = AuthenticateUser(login.UserName.ToString(), login.UserPassword.ToString());
 
-                            // Send a "Yes" response back.
-                            //
-                            VersionYesNoBlock yes = new VersionYesNoBlock(CopyDiskBlock.Yes, 0, "Come on in, the water's fine.");
-                            _channel.Send(Serializer.Serialize(yes));
+                            if (_userToken != null)
+                            {
+                                //
+                                // Send a "Yes" response back.
+                                //
+                                VersionYesNoBlock yes = new VersionYesNoBlock(CopyDiskBlock.Yes, 0, "Come on in, the water's fine.");
+                                _channel.Send(Serializer.Serialize(yes));
+                            }
+                            else
+                            {
+                                //
+                                // Send a "No" response back indicating the login failure.
+                                //
+                                VersionYesNoBlock no = new VersionYesNoBlock(CopyDiskBlock.No, (ushort)NoCode.IllegalOrIncorrectPassword, "Invalid username or password.");
+                                _channel.Send(Serializer.Serialize(no), true);                                
+                            }
                         }
                         break;
 
@@ -408,6 +421,17 @@ namespace IFS.CopyDisk
                             _startAddress = _pack.DiskAddressToVirtualAddress(transferParameters.StartAddress);
                             _endAddress = _pack.DiskAddressToVirtualAddress(transferParameters.EndAddress);
 
+                            // Validate that the user is allowed to store.
+                            if (blockType == CopyDiskBlock.StoreDisk)
+                            {
+                                if (_userToken.Privileges != IFSPrivileges.ReadWrite)
+                                {
+                                    VersionYesNoBlock no = new VersionYesNoBlock(CopyDiskBlock.No, (ushort)NoCode.UnitWriteProtected, "You do not have permission to store disk images.");
+                                    _channel.Send(Serializer.Serialize(no));
+                                    break;
+                                }
+                            }
+
                             Log.Write(LogType.Verbose, LogComponent.CopyDisk, "Transfer is from block {0} to block {1}", transferParameters.StartAddress, transferParameters.EndAddress);
 
                             // Validate start/end parameters
@@ -419,7 +443,7 @@ namespace IFS.CopyDisk
                                 _channel.Send(Serializer.Serialize(no));
                             }
                             else
-                            {
+                            {                                
                                 // We're OK.  Save the parameters and send a Yes response.
                                 VersionYesNoBlock yes = new VersionYesNoBlock(CopyDiskBlock.Yes, 0, "You are cleared for launch.");
                                 _channel.Send(Serializer.Serialize(yes));
@@ -564,6 +588,22 @@ namespace IFS.CopyDisk
             }            
         }
 
+        private UserToken AuthenticateUser(string userName, string password)
+        {
+            //
+            // If no username is specified then we default to the guest account.
+            //
+            if (string.IsNullOrEmpty(userName))
+            {
+                return UserToken.Guest;
+            }
+
+            UserToken user = Authentication.Authenticate(userName, password);            
+
+            return user;
+
+        }
+
         /// <summary>
         /// Builds a relative path to the directory that holds the disk images.
         /// </summary>
@@ -576,6 +616,9 @@ namespace IFS.CopyDisk
 
         private Thread _workerThread;
         private bool _running;
+
+        // The user token for this transaction.  We assume guest access by default.
+        private UserToken _userToken = UserToken.Guest;
 
         // The pack being read / stored by this server
         private DiabloPack _pack = null;
