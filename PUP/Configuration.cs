@@ -64,6 +64,16 @@ namespace IFS
         public static readonly string InterfaceName;
 
         /// <summary>
+        /// The network that this server lives on
+        /// </summary>
+        public static readonly int ServerNetwork;
+
+        /// <summary>
+        /// The host number for this server.
+        /// </summary>
+        public static readonly int ServerHost;
+
+        /// <summary>
         /// The root directory for the FTP file store.
         /// </summary>
         public static readonly string FTPRoot;

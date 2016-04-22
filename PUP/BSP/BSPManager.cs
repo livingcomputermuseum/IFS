@@ -152,7 +152,7 @@ namespace IFS.BSP
                 case PupType.Abort:
                     {                                                
                         string abortMessage = Helpers.ArrayToString(p.Contents);
-                        Log.Write(LogType.Warning, LogComponent.RTP, String.Format("BSP aborted, message: '{0}'", abortMessage));
+                        Log.Write(LogType.Warning, LogComponent.RTP, String.Format("BSP aborted, message from client: '{0}'", abortMessage));
 
                         DestroyChannel(channel);
                     }
@@ -257,7 +257,8 @@ namespace IFS.BSP
             }
             else
             {
-                // TODO: send back "server full" repsonse of some sort.
+                // Send an Abort with an informative message.
+                channel.SendAbort("IFS Server full, try again later.");
             }
         }        
 

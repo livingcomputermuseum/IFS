@@ -37,7 +37,7 @@ namespace IFS
             // Get our host address; for now just hardcode it.
             // TODO: need to define config files, etc.
 
-            _localHost = new HostAddress(1, 1);
+            _localHost = new HostAddress((byte)Configuration.ServerNetwork, (byte)Configuration.ServerHost);
 
             // Load in hosts table from hosts file.
             LoadHostTable();

@@ -38,6 +38,18 @@ namespace IFS
             return _accounts.Values.ToList<UserToken>();
         }
 
+        public static UserToken GetUser(string userName)
+        {
+            if (_accounts.ContainsKey(userName))
+            {
+                return _accounts[userName];
+            }
+            else
+            {
+                return null;
+            }
+        }
+
         public static UserToken Authenticate(string userName, string password)
         {
             //

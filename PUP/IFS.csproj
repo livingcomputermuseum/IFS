@@ -79,6 +79,10 @@
     <Compile Include="BSP\BSPChannel.cs" />
     <Compile Include="BSP\BSPManager.cs" />
     <Compile Include="Configuration.cs" />
+    <Compile Include="Console\Console.cs" />
+    <Compile Include="Console\ConsoleAttributes.cs" />
+    <Compile Include="Console\ConsoleCommands.cs" />
+    <Compile Include="Console\ConsolePrompt.cs" />
     <Compile Include="CopyDisk\CopyDiskServer.cs" />
     <Compile Include="CopyDisk\DiabloPack.cs" />
     <Compile Include="DirectoryServices.cs" />

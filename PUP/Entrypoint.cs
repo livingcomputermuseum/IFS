@@ -1,6 +1,7 @@
 ﻿using IFS.Boot;
 using IFS.CopyDisk;
 using IFS.FTP;
+using IFS.IfsConsole;
 using IFS.Transport;
 using PcapDotNet.Core;
 using PcapDotNet.Core.Extensions;
@@ -96,20 +97,10 @@ namespace IFS
         }
 
         private static void RunCommandPrompt()
-        {
-            List<UserToken> users = Authentication.EnumerateUsers();
-
-            Authentication.SetPassword(users[0].UserName, "hamdinger");
-
-            UserToken user = Authentication.Authenticate(users[0].UserName, "hamdinger");
-
-            while (true)
-            {
-                Console.Write(">>>");
-                string command = Console.ReadLine();
-            }
+        {            
+            ConsoleExecutor.Instance.Run();
         }
 
-    private static BreathOfLife _breathOfLifeServer;
+        private static BreathOfLife _breathOfLifeServer;
     }
 }
