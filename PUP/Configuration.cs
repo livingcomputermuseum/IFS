@@ -47,6 +47,11 @@ namespace IFS
                 throw new InvalidConfigurationException("Boot root path is invalid.");
             }
 
+            if (string.IsNullOrWhiteSpace(BootRoot) || !Directory.Exists(MailRoot))
+            {
+                throw new InvalidConfigurationException("Mail root path is invalid.");
+            }
+
             if (MaxWorkers < 1)
             {
                 throw new InvalidConfigurationException("MaxWorkers must be >= 1.");
@@ -87,6 +92,11 @@ namespace IFS
         /// The root directory for the Boot file store.
         /// </summary>
         public static readonly string BootRoot;
+
+        /// <summary>
+        /// The root directory for the Mail file store.
+        /// </summary>
+        public static readonly string MailRoot;
 
         /// <summary>
         /// The maximum number of worker threads for protocol handling.

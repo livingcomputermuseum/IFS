@@ -24,6 +24,7 @@ namespace IFS.Logging
         EFTP = 0x200,
         BootServer = 0x400,
         UDP = 0x800,
+        Mail = 0x1000,
 
         Configuration = 0x1000,
         All = 0x7fffffff

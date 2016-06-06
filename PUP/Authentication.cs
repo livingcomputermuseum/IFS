@@ -51,38 +51,51 @@ namespace IFS
         }
 
         public static UserToken Authenticate(string userName, string password)
-        {
+        {            
+
             //
             // Look up the user
             //
             UserToken token = null;
 
-            if (_accounts.ContainsKey(userName))
+            // 
+            // Verify that the username's host/registry (if present) matches
+            // our hostname.
+            //
+            if (ValidateUserRegistry(userName))
             {
-                UserToken accountToken = _accounts[userName];
-
                 //
-                // Account exists; compare password hash against the hash of the password provided.
-                // (If there is no hash then no password is set and we do no check.)
-                // 
-                if (!string.IsNullOrEmpty(accountToken.PasswordHash))
-                {                                       
-                    // Convert hash to base64 string and compare with actual password hash
-                    if (ValidatePassword(accountToken, password))
+                // Strip off any host/registry on the username, lookup based on username only.
+                //
+                userName = GetUserNameFromFullName(userName);
+
+                if (_accounts.ContainsKey(userName))
+                {
+                    UserToken accountToken = _accounts[userName];
+
+                    //
+                    // Account exists; compare password hash against the hash of the password provided.
+                    // (If there is no hash then no password is set and we do no check.)
+                    // 
+                    if (!string.IsNullOrEmpty(accountToken.PasswordHash))
                     {
-                        // Yay!
+                        // Convert hash to base64 string and compare with actual password hash
+                        if (ValidatePassword(accountToken, password))
+                        {
+                            // Yay!
+                            token = accountToken;
+                        }
+                        else
+                        {
+                            // No match, password is incorrect.
+                            token = null;
+                        }
+                    }
+                    else if (string.IsNullOrEmpty(password))
+                    {
+                        // Just ensure both passwords are empty.
                         token = accountToken;
                     }
-                    else
-                    {
-                        // No match, password is incorrect.
-                        token = null;
-                    }
-                }
-                else if (string.IsNullOrEmpty(password))
-                {
-                    // Just ensure both passwords are empty.
-                    token = accountToken;
                 }
             }
 
@@ -162,6 +175,57 @@ namespace IFS
             }
 
             return bSuccess;
+        }
+
+        /// <summary>
+        /// Verifies whether the specified user account is registered.
+        /// </summary>
+        /// <param name="userName"></param>
+        /// <returns></returns>
+        public static bool UserExists(string userName)
+        {
+            return _accounts.ContainsKey(userName);
+        }
+
+        /// <summary>
+        /// Given a full user name (i.e. username.HOST), validates that the
+        /// HOST (or "registry") portion matches our hostname.
+        /// </summary>
+        /// <param name="fullUserName"></param>
+        /// <returns></returns>
+        public static bool ValidateUserRegistry(string fullUserName)
+        {
+            if (fullUserName.Contains("."))
+            {
+                // Strip off the host/registry name and compare to our hostname.
+                string hostName = fullUserName.Substring(fullUserName.IndexOf(".") + 1);
+
+                return hostName.ToLowerInvariant() == DirectoryServices.Instance.LocalHostName.ToLowerInvariant();
+            }
+            else
+            {
+                // No registry appended, we assume this is destined for us by default.
+                return true;
+            }
+        }
+
+
+        /// <summary>
+        /// Given a full user name (i.e. username.HOST), returns only the username portion.
+        /// </summary>
+        /// <param name="fullUserName"></param>
+        /// <returns></returns>
+        public static string GetUserNameFromFullName(string fullUserName)
+        {
+            // If user name has a host/registry appended, we will strip it off.
+            if (fullUserName.Contains("."))
+            {
+                return fullUserName.Substring(0, fullUserName.IndexOf("."));
+            }
+            else
+            {
+                return fullUserName;
+            }
         }
 
         private static bool ValidatePassword(UserToken accountToken, string password)

@@ -46,6 +46,7 @@ namespace IFS
             // RTP/BSP based:            
             PUPProtocolDispatcher.Instance.RegisterProtocol(new PUPProtocolEntry("CopyDisk", 0x15  /* 25B */, ConnectionType.BSP, typeof(CopyDiskWorker)));
             PUPProtocolDispatcher.Instance.RegisterProtocol(new PUPProtocolEntry("FTP", 0x3, ConnectionType.BSP, typeof(FTPWorker)));
+            PUPProtocolDispatcher.Instance.RegisterProtocol(new PUPProtocolEntry("Mail", 0x7, ConnectionType.BSP, typeof(FTPWorker)));
 
             // Breath Of Life
             _breathOfLifeServer = new BreathOfLife();

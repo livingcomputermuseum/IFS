@@ -7,11 +7,13 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.IO;
+using IFS.Mail;
 
 namespace IFS.FTP
 {
     public enum FTPCommand
     {
+        // Standard FTP
         Invalid = 0,
         Retrieve = 1,
         Store = 2,
@@ -27,10 +29,17 @@ namespace IFS.FTP
         NewEnumerate = 12,
         Delete = 14,
         Rename = 15,
+
+        // Mail-specific
+        StoreMail = 16,
+        RetrieveMail = 17,
+        FlushMailbox = 18,
+        MailboxException = 19,
     }
 
     public enum NoCode
     {
+        // Standard FTP
         UnimplmentedCommand = 1,
         UserNameRequired = 2,
         IllegalCommand = 3,
@@ -64,7 +73,12 @@ namespace IFS.FTP
         TransientServerFailure = 71,
         PermamentServerFailure = 72,
         FileBusy = 73,
-        FileAlreadyExists = 74
+        FileAlreadyExists = 74,
+
+        // Mail-specific
+        NoValidMailbox = 32,
+        IllegalMailboxSyntax = 33,
+        IllegalSender = 34,
     }
 
     struct FTPYesNoVersion
@@ -210,11 +224,66 @@ namespace IFS.FTP
                             // Argument to New-Store is a property list (string).
                             //
                             string fileSpec = Helpers.ArrayToString(data);
-                            Log.Write(LogType.Verbose, LogComponent.FTP, "File spec for new-store is '{0}'.", fileSpec);
+                            Log.Write(LogType.Verbose, LogComponent.FTP, "File spec for delete is '{0}'.", fileSpec);
 
                             PropertyList pl = new PropertyList(fileSpec);
 
                             DeleteFiles(pl);
+                        }
+                        break;
+
+                    case FTPCommand.RetrieveMail:
+                        {
+                            // Argument to Retrieve-Mail is a property list (string).
+                            //
+                            string mailSpec = Helpers.ArrayToString(data);
+                            Log.Write(LogType.Verbose, LogComponent.FTP, "Mailbox spec for retrieve-mail is '{0}'.", mailSpec);
+
+                            PropertyList pl = new PropertyList(mailSpec);
+
+                            RetrieveMail(pl);
+                        }
+                        break;
+
+                    case FTPCommand.FlushMailbox:
+                        {                            
+                            if (_lastRetrievedMailFiles != null)
+                            {
+                                foreach (string mailFileToDelete in _lastRetrievedMailFiles)
+                                {
+                                    MailManager.DeleteMail(_lastRetrievedMailbox, mailFileToDelete);
+                                }
+                            }
+
+                            SendFTPYesResponse("Retreived mail flushed from mailbox.");
+                        }
+                        break;
+
+
+                    case FTPCommand.StoreMail:
+                        {
+                            //
+                            // Argument to Retrieve-Mail is one or more property lists.
+                            //
+                            string mailSpec = Helpers.ArrayToString(data);
+                            Log.Write(LogType.Verbose, LogComponent.FTP, "Mailbox spec for store-mail is '{0}'.", mailSpec);
+
+                            //
+                            // Annoyingly, the argument is numerous property lists with no delimiter, not a single list.
+                            //
+                            List<PropertyList> recipients = new List<PropertyList>();
+                            int currentIndex = 0;
+
+                            while (currentIndex < mailSpec.Length)
+                            {
+                                int endIndex = 0;
+                                PropertyList pl = new PropertyList(mailSpec, currentIndex, out endIndex);
+
+                                recipients.Add(pl);
+                                currentIndex = endIndex;
+                            }
+
+                            StoreMail(recipients);
                         }
                         break;
 
@@ -632,6 +701,243 @@ namespace IFS.FTP
         }
 
         /// <summary>
+        /// Retrieves mail files for the specified mailbox.
+        /// </summary>
+        /// <param name="fileSpec"></param>
+        private void RetrieveMail(PropertyList mailSpec)
+        {
+            //
+            // The property list must include a Mailbox property that identifies the mailbox to be opened.
+            //
+            if (!mailSpec.ContainsPropertyValue(KnownPropertyNames.Mailbox))
+            {
+                SendFTPNoResponse(NoCode.NoValidMailbox, "No mailbox specified.");
+                return;
+            }
+
+            _lastRetrievedMailbox = mailSpec.GetPropertyValue(KnownPropertyNames.Mailbox);           
+
+            //
+            // Validate that the requested mailbox's registry is on this server.
+            //
+            if (!Authentication.ValidateUserRegistry(_lastRetrievedMailbox))
+            {
+                SendFTPNoResponse(NoCode.NoValidMailbox, "Incorrect registry for this server.");
+                return;
+            }
+
+            _lastRetrievedMailbox = Authentication.GetUserNameFromFullName(_lastRetrievedMailbox);
+
+            //
+            // Authenticate and see if the user has access to the requested mailbox.
+            // In our implementation, the username and mailbox name are one and the same, if the two don't match
+            // (or if authentication failed) then we're done.
+            //
+            UserToken user = AuthenticateUser(mailSpec);
+
+            if (user == null)
+            {
+                SendFTPNoResponse(NoCode.IllegalConnectPassword, "Invalid username or password for mailbox.");
+                return;
+            }
+
+            if (user.UserName.ToLowerInvariant() != _lastRetrievedMailbox.ToLowerInvariant())
+            {
+                SendFTPNoResponse(NoCode.AccessDenied, "You do not have access to the specified mailbox.");
+                return;
+            }
+
+            //
+            // All clear at this point.  If the user has any mail in his/her mailbox, send it now.
+            //
+            _lastRetrievedMailFiles = MailManager.EnumerateMail(_lastRetrievedMailbox);
+
+            if (_lastRetrievedMailFiles != null)
+            {
+                foreach (string mailFile in _lastRetrievedMailFiles)
+                {                    
+                    using (Stream mailStream = MailManager.RetrieveMail(_lastRetrievedMailbox, mailFile))
+                    {
+                        Log.Write(LogType.Verbose, LogComponent.FTP, "Preparing to send mail file {0}.", mailFile);
+
+                        //
+                        // Build a property list for the mail message.
+                        //
+                        PropertyList mailProps = new PropertyList();
+                        mailProps.SetPropertyValue(KnownPropertyNames.Length, mailStream.Length.ToString());
+                        mailProps.SetPropertyValue(KnownPropertyNames.DateReceived, MailManager.GetReceivedTime(_lastRetrievedMailbox, mailFile));
+                        mailProps.SetPropertyValue(KnownPropertyNames.Opened, "No");
+                        mailProps.SetPropertyValue(KnownPropertyNames.Deleted, "No");
+                        mailProps.SetPropertyValue(KnownPropertyNames.Type, "Text");                  // We treat all mail as text
+                        mailProps.SetPropertyValue(KnownPropertyNames.ByteSize, "8");                   // 8-bit bytes, please.
+
+                        //
+                        // Send the property list (without EOC)
+                        //
+                        _channel.SendMark((byte)FTPCommand.HereIsPropertyList, false);
+                        _channel.Send(Helpers.StringToArray(mailProps.ToString()));
+                        
+                        //
+                        // Send the mail text.
+                        //                        
+                        _channel.SendMark((byte)FTPCommand.HereIsFile, true);
+                        byte[] data = new byte[512];                       
+
+                        while (true)
+                        {
+                            int read = mailStream.Read(data, 0, data.Length);
+
+                            if (read == 0)
+                            {
+                                // Nothing to send, we're done.
+                                break;
+                            }
+
+                            Log.Write(LogType.Verbose, LogComponent.FTP, "Sending mail data, current file position {0}.", mailStream.Position);
+                            _channel.Send(data, read, true);
+
+                            if (read < data.Length)
+                            {
+                                // Short read, end of file.    
+                                break;
+                            }
+                        }
+
+                        Log.Write(LogType.Verbose, LogComponent.FTP, "Mail file {0} sent.", mailFile);
+                    }
+                }
+            }
+
+            // All done, send a Yes/EOC to terminate the exchange.
+            SendFTPYesResponse("Mail retrieved.");
+
+        }
+
+        /// <summary>
+        /// Stores mail files to the specified mailboxes.
+        /// </summary>
+        /// <param name="fileSpec"></param>
+        private void StoreMail(List<PropertyList> mailSpecs)
+        {
+            //
+            // There are two defined properties: Mailbox and Sender.
+            // The Sender field can really be anything and real IFS servers
+            // did not authenticate or verify this name.  We will simply ignore
+            // it since we can't really do anything useful with it.
+            // (I do like the total lack of security in this protocol.)
+            //
+            List<string> destinationMailboxes = new List<string>();
+
+            foreach (PropertyList mailSpec in mailSpecs)
+            {
+                if (!mailSpec.ContainsPropertyValue(KnownPropertyNames.Mailbox))
+                {
+                    Log.Write(LogType.Verbose, LogComponent.Mail, "No mailbox specified, aborting.");
+                    SendFTPNoResponse(NoCode.NoValidMailbox, "No mailbox specified.");
+                    return;
+                }
+
+                string destinationMailbox = mailSpec.GetPropertyValue(KnownPropertyNames.Mailbox);
+
+                //
+                // Validate that the destination mailbox's registry is on this server.
+                // We do not support forwarding or routing of mail, so mail intended for another server
+                // will never get there.
+                //
+                if (!Authentication.ValidateUserRegistry(destinationMailbox))
+                {
+                    SendFTPNoResponse(NoCode.NoValidMailbox, "Incorrect registry for this server.  Mail forwarding not supported.");
+                    return;
+                }
+
+                destinationMailbox = Authentication.GetUserNameFromFullName(destinationMailbox);
+
+                // Verify that the user we're sending this to actually exists...
+                if (!Authentication.UserExists(destinationMailbox))
+                {
+                    Log.Write(LogType.Verbose, LogComponent.Mail, "Mailbox {0} does not exist, aborting.", destinationMailbox);
+                    SendFTPNoResponse(NoCode.NoValidMailbox, "The specified mailbox does not exist.");
+                    return;
+                }
+
+                destinationMailboxes.Add(destinationMailbox);
+            }
+
+            // OK so far, send a Yes and wait for a file.
+            SendFTPYesResponse("Go ahead.");
+
+            //
+            // We now expect a "Here-Is-File"...
+            //
+            FTPCommand hereIsFile = (FTPCommand)_channel.WaitForMark();
+
+            if (hereIsFile != FTPCommand.HereIsFile)
+            {
+                throw new InvalidOperationException("Expected Here-Is-File from client.");
+            }
+
+            //
+            // At this point the client should start sending data, so we should start receiving it.            
+            //             
+            bool success = true;
+            FTPCommand lastMark;
+            byte[] buffer;
+
+            try
+            {
+                Log.Write(LogType.Verbose, LogComponent.Mail, "Receiving mail file to memory...");
+                
+                // TODO: move to constant. Possibly make max size configurable.
+                // For now, it seems very unlikely that any Alto is going to have a single file larger than 4mb.
+                lastMark = ReadUntilNextMark(out buffer, 4096 * 1024);
+
+                Log.Write(LogType.Verbose, LogComponent.Mail, "Received {0} bytes.", buffer.Length);                
+
+                // Write out to files
+                foreach (string destination in destinationMailboxes)
+                {
+                    using (Stream mailFile = MailManager.StoreMail(destination))
+                    {
+                        mailFile.Write(buffer, 0, buffer.Length);
+
+                        Log.Write(LogType.Verbose, LogComponent.Mail, "Wrote {0} bytes to mail file in mailbox {1}.", buffer.Length, destination);
+                    }
+                }            
+            }
+            catch (Exception e)
+            {
+                // We failed while writing the mail file, send a No response to the client.
+                // Per the spec, we need to drain the client data first.
+                lastMark = ReadUntilNextMark(out buffer, 4096 * 1024);   // TODO: move to constant
+                success = false;
+
+                Log.Write(LogType.Warning, LogComponent.Mail, "Failed to write mail file.  Error '{1}'.  Aborting.", e.Message);
+            }
+
+            // Read in the last command we got (should be a Yes or No).  This is sort of annoying in that it breaks the normal convention of
+            // Command followed by EndOfCommand, so we have to read the remainder of the Yes/No command separately.
+            if (lastMark != FTPCommand.Yes && lastMark != FTPCommand.No)
+            {
+                throw new InvalidOperationException("Expected Yes or No response from client after transfer.");
+            }
+
+            buffer = ReadNextCommandData();
+            FTPYesNoVersion clientYesNo = (FTPYesNoVersion)Serializer.Deserialize(buffer, typeof(FTPYesNoVersion));
+
+            Log.Write(LogType.Verbose, LogComponent.Mail, "Client success code is {0}, {1}, '{2}'", lastMark, clientYesNo.Code, clientYesNo.Code);
+
+            if (!success)
+            {
+                // TODO: provide actual No codes.
+                SendFTPNoResponse(NoCode.TransientServerFailure, "Mail transfer failed.");
+            }
+            else
+            {
+                SendFTPYesResponse("Mail transfer completed.");
+            }
+        }
+
+        /// <summary>
         /// Open the file specified by the provided PropertyList
         /// </summary>
         /// <param name="fileSpec"></param>
@@ -818,8 +1124,8 @@ namespace IFS.FTP
             {
                 password = fileSpec.GetPropertyValue(KnownPropertyNames.UserPassword);
             }
-
-            UserToken user = Authentication.Authenticate(userName, password);
+            
+            UserToken user = Authentication.Authenticate(userName, password);            
 
             if (user == null)
             {
@@ -847,7 +1153,7 @@ namespace IFS.FTP
 
             string userDirPath = Path.Combine(Configuration.FTPRoot, userToken.HomeDirectory);
             return fullPath.StartsWith(userDirPath, StringComparison.OrdinalIgnoreCase);
-        }
+        }       
 
         private void SendFTPResponse(FTPCommand responseCommand, object data)
         {
@@ -896,5 +1202,13 @@ namespace IFS.FTP
 
         private Thread _workerThread;
         private bool _running;
+
+        /// <summary>
+        /// The last set of mail files retrieved via a Retrieve-Mail operation.
+        /// Saved so that Flush-Mailbox can use it to delete only those mails that
+        /// were last pulled.
+        /// </summary>
+        private IEnumerable<string> _lastRetrievedMailFiles;
+        private string _lastRetrievedMailbox;
     }
 }

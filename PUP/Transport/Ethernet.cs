@@ -35,7 +35,7 @@ namespace IFS.Transport
             _callback = callback;
 
             // Now that we have a callback we can start receiving stuff.
-            Open(false /* not promiscuous */, int.MaxValue);
+            Open(true /* promiscuous */, int.MaxValue);
 
             // Kick off the receiver thread, this will never return or exit.
             Thread receiveThread = new Thread(new ThreadStart(BeginReceive));
@@ -175,7 +175,9 @@ namespace IFS.Transport
             // Filter out encapsulated 3mbit frames and look for PUPs, forward them on.
             //
             if ((int)p.Ethernet.EtherType == _3mbitFrameType)
-            {               
+            {
+                Log.Write(LogType.Verbose, LogComponent.Ethernet, "3mbit pup received.");
+
                 MemoryStream packetStream = p.Ethernet.Payload.ToMemoryStream();
 
                 // Read the length prefix (in words), convert to bytes.

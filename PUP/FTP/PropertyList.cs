@@ -34,6 +34,13 @@ namespace IFS.FTP
         public static readonly string Author = "Author";
         public static readonly string Checksum = "Checksum";
         public static readonly string DesiredProperty = "Desired-Property";
+
+        // Mail
+        public static readonly string Mailbox = "Mailbox";
+        public static readonly string Length = "Length";
+        public static readonly string DateReceived = "Date-Received";
+        public static readonly string Opened = "Opened";
+        public static readonly string Deleted = "Deleted";
     }         
 
     /// <summary>
@@ -76,9 +83,25 @@ namespace IFS.FTP
             _propertyList = new Dictionary<string, string>();
         }
 
+        /// <summary>
+        /// Parses a property list from the specified string.
+        /// </summary>
+        /// <param name="list"></param>
         public PropertyList(string list) : this()
         {
-            ParseList(list);
+            ParseList(list, 0);
+        }
+
+        /// <summary>
+        /// Parses a property list from the specified string at the given starting offset.
+        /// endIndex returns the end of the parsed property list in the string.
+        /// </summary>
+        /// <param name="input"></param>
+        /// <param name="startIndex"></param>
+        /// <param name="endIndex"></param>
+        public PropertyList(string input, int startIndex, out int endIndex) : this()
+        {
+            endIndex = ParseList(input, startIndex);            
         }
 
         /// <summary>
@@ -171,8 +194,10 @@ namespace IFS.FTP
         /// Parses a string representation of a property list into our hash table.
         /// </summary>
         /// <param name="list"></param>
-        private void ParseList(string list)
+        private int ParseList(string input, int startOffset)
         {
+            string list = input.Substring(startOffset);
+
             //
             // First check the basics; the string must start and end with left and right parens, respectively.
             // We do not trim whitespace as there should not be any per the spec.
@@ -191,8 +216,14 @@ namespace IFS.FTP
             //
             // Loop until we hit the end of the string (minus the closing paren)
             //
-            while (index < list.Length - 1)
+            while (index < list.Length)
             { 
+                // If this is a closing paren, this denotes the end of the property list.
+                if (list[index] == ')')
+                {
+                    break;
+                }
+
                 // Start of next property, must begin with a left paren.
                 if (list[index] != '(')
                 {
@@ -273,6 +304,8 @@ namespace IFS.FTP
                     throw new InvalidOperationException(String.Format("Duplicate property entry for '{0}", propertyName));
                 }                
             }
+
+            return index + startOffset + 1;
         }        
 
         private Dictionary<string, string> _propertyList;

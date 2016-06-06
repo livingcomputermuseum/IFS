@@ -102,6 +102,7 @@ namespace IFS
                 pup.DestinationPort.Host != DirectoryServices.Instance.LocalHost)          // Not our address.
             {
                 // Do nothing with this PUP.
+                Log.Write(LogType.Verbose, LogComponent.PUP, "PUP is neither broadcast nor for us.  Discarding.");
                 return;
             }
 

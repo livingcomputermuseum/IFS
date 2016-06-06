@@ -564,7 +564,7 @@ namespace IFS.BSP
             // Ensure things are set up
             EstablishWindow();            
 
-            _outputWindowLock.EnterUpgradeableReadLock();
+            _outputWindowLock.EnterUpgradeableReadLock();            
 
             if (_outputWindow.Count < _clientLimits.MaxPups)
             {
@@ -572,7 +572,7 @@ namespace IFS.BSP
                 // There's space in the window, so go for it.
                 //
                 _outputWindowLock.EnterWriteLock();
-                _outputWindow.Add(p);
+                _outputWindow.Add(p);                
                 _outputWindowLock.ExitWriteLock();                
             }
             else

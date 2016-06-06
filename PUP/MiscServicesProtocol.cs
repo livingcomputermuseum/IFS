@@ -1,7 +1,7 @@
 ﻿using IFS.Boot;
 using IFS.EFTP;
 using IFS.Logging;
-
+using IFS.Mail;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -88,7 +88,15 @@ namespace IFS
 
                 case PupType.BootDirectoryRequest:
                     SendBootDirectory(p);
-                    break;      
+                    break;
+
+                case PupType.AuthenticateRequest:
+                    SendAuthenticationResponse(p);
+                    break;
+
+                case PupType.MailCheckRequestLaurel:
+                    SendMailCheckResponse(p);
+                    break;  
 
                 default:
                     Log.Write(LogComponent.MiscServices, String.Format("Unhandled misc. protocol {0}", p.Type));
@@ -317,6 +325,87 @@ namespace IFS
                 PUPProtocolDispatcher.Instance.SendPup(bootDirReply);
             }
 
+        }
+
+        private void SendAuthenticationResponse(PUP p)
+        {
+            //
+            // "Pup Contents: Two Mesa strings (more precisely StringBodys), packed in such a way that
+            //  the maxLength of the first string may be used to locate the second string.  The first
+            //  string is a user name and the second a password."
+            //
+
+            // I have chosen not to write a helper class encapsulating Mesa strings since this is the
+            // first (and so far *only*) instance in which Mesa strings are used in IFS communications.
+            //
+
+            // Empirical analysis shows the format of a Mesa string to be:
+            // Word 1: Length (bytes)
+            // Word 2: MaxLength (bytes)
+            // Byte 4 thru 4 + MaxLength: string data
+            // data is padded to a word length.
+            //
+            string userName = Helpers.MesaArrayToString(p.Contents, 0);
+
+            int passwordOffset = (userName.Length % 2) == 0 ? userName.Length : userName.Length + 1;
+            string password = Helpers.MesaArrayToString(p.Contents, passwordOffset + 4);
+            
+            UserToken token = Authentication.Authenticate(userName, password);
+
+            if (token == null)
+            {
+                string errorString = "Invalid username or password.";
+                PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
+                PUP errorReply = new PUP(PupType.AuthenticateNegativeResponse, p.ID, p.SourcePort, localPort, Helpers.StringToArray(errorString));
+
+                PUPProtocolDispatcher.Instance.SendPup(errorReply);
+            }
+            else
+            {
+                // S'ok!
+                PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
+                PUP okReply = new PUP(PupType.AuthenticatePositiveResponse, p.ID, p.SourcePort, localPort, new byte[] { });
+
+                PUPProtocolDispatcher.Instance.SendPup(okReply);
+            }
+        }
+
+        private void SendMailCheckResponse(PUP p)
+        {
+            //
+            // "Pup Contents: A string specifying the mailbox name."
+            //
+
+            //
+            // See if there is any mail for the specified mailbox.
+            //
+            string mailboxName = Helpers.ArrayToString(p.Contents);
+
+            //
+            // If mailbox name has a host/registry appended, we will strip it off.
+            // TODO: probably should validate host...
+            //
+            if (mailboxName.Contains("."))
+            {
+                mailboxName = mailboxName.Substring(0, mailboxName.IndexOf("."));
+            }
+
+            IEnumerable<string> mailList = MailManager.EnumerateMail(mailboxName);
+
+            if (mailList == null || mailList.Count() == 0)
+            {
+                PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
+                PUP noMailReply = new PUP(PupType.NoNewMailExistsReply, p.ID, p.SourcePort, localPort, new byte[] { });
+
+                PUPProtocolDispatcher.Instance.SendPup(noMailReply);
+            }
+            else
+            {
+                PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
+                PUP mailReply = new PUP(PupType.NewMailExistsReply, p.ID, p.SourcePort, localPort, Helpers.StringToArray("You've got mail!"));
+
+                PUPProtocolDispatcher.Instance.SendPup(mailReply);
+            }
         }
 
         private struct BootDirectoryBlock

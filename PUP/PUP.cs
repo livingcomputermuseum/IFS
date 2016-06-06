@@ -49,6 +49,13 @@ namespace IFS
         AltoTimeRequest = 134,
         AltoTimeResponse = 135,
 
+        // Mail check
+        MailCheckRequestMsg =  136,
+        NewMailExistsReply = 137,
+        NoNewMailExistsReply = 138,
+        NoSuchMailboxReply = 139,
+        MailCheckRequestLaurel = 140,
+
         // Network Lookup
         NameLookupRequest = 144,
         NameLookupResponse = 145,
@@ -427,6 +434,26 @@ namespace IFS
             for (int i = 0; i < a.Length; i++)
             {
                 sb.Append((char)(a[i]));
+            }
+
+            return sb.ToString();
+        }
+
+        public static string MesaArrayToString(byte[] a, int offset)
+        {
+            ushort length = ReadUShort(a, offset);
+            ushort maxLength = ReadUShort(a, offset + 2);
+
+            if (maxLength + offset > a.Length)
+            {
+                return String.Empty;
+            }
+
+            StringBuilder sb = new StringBuilder(maxLength);
+
+            for (int i = 0; i < maxLength; i++)
+            {
+                sb.Append((char)(a[i + offset + 4]));
             }
 
             return sb.ToString();

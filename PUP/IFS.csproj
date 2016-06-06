@@ -50,17 +50,41 @@
     <ErrorReport>prompt</ErrorReport>
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\x86\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DebugType>full</DebugType>
+    <PlatformTarget>x86</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+    <Prefer32Bit>true</Prefer32Bit>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x86'">
+    <OutputPath>bin\x86\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>x86</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+    <Prefer32Bit>true</Prefer32Bit>
+  </PropertyGroup>
   <ItemGroup>
-    <Reference Include="PcapDotNet.Base">
+    <Reference Include="PcapDotNet.Base, Version=1.0.2.21699, Culture=neutral, PublicKeyToken=4b6f3e583145a652, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
       <HintPath>pcap\PcapDotNet.Base.dll</HintPath>
     </Reference>
-    <Reference Include="PcapDotNet.Core">
+    <Reference Include="PcapDotNet.Core, Version=1.0.2.21711, Culture=neutral, PublicKeyToken=4b6f3e583145a652, processorArchitecture=x86">
+      <SpecificVersion>False</SpecificVersion>
       <HintPath>pcap\PcapDotNet.Core.dll</HintPath>
     </Reference>
-    <Reference Include="PcapDotNet.Core.Extensions">
+    <Reference Include="PcapDotNet.Core.Extensions, Version=1.0.2.21712, Culture=neutral, PublicKeyToken=4b6f3e583145a652, processorArchitecture=x86">
+      <SpecificVersion>False</SpecificVersion>
       <HintPath>pcap\PcapDotNet.Core.Extensions.dll</HintPath>
     </Reference>
-    <Reference Include="PcapDotNet.Packets">
+    <Reference Include="PcapDotNet.Packets, Version=1.0.2.21701, Culture=neutral, PublicKeyToken=4b6f3e583145a652, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
       <HintPath>pcap\PcapDotNet.Packets.dll</HintPath>
     </Reference>
     <Reference Include="System" />
@@ -95,6 +119,7 @@
     <Compile Include="FTP\PropertyList.cs" />
     <Compile Include="Logging\Log.cs" />
     <Compile Include="GatewayInformationProtocol.cs" />
+    <Compile Include="Mail\MailManager.cs" />
     <Compile Include="MiscServicesProtocol.cs" />
     <Compile Include="Serializer.cs" />
     <Compile Include="Transport\Ethernet.cs" />

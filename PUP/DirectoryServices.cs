@@ -36,11 +36,20 @@ namespace IFS
         {
             // Get our host address; for now just hardcode it.
             // TODO: need to define config files, etc.
-
-            _localHost = new HostAddress((byte)Configuration.ServerNetwork, (byte)Configuration.ServerHost);
+            _localHost = new HostAddress((byte)Configuration.ServerNetwork, (byte)Configuration.ServerHost);            
 
             // Load in hosts table from hosts file.
             LoadHostTable();
+
+            // Look up our hostname in the table.            
+            _localHostName = AddressLookup(_localHost);
+
+            if (_localHostName == null)
+            {
+                // Our name isn't in the hosts table.
+                Log.Write(LogType.Error, LogComponent.DirectoryServices, "Warning: local host name not specified in hosts table  Defaulting to 'unset'.");
+                _localHostName = "unset";
+            }
 
             Log.Write(LogComponent.DirectoryServices, "Directory services initialized.");
         }
@@ -101,6 +110,11 @@ namespace IFS
         public byte LocalHost
         {
             get { return _localHost.Host; }
+        }
+
+        public string LocalHostName
+        {
+            get { return _localHostName; }
         }
 
         private void LoadHostTable()
@@ -258,6 +272,11 @@ namespace IFS
         /// Points to us.
         /// </summary>
         private HostAddress _localHost;
+
+        /// <summary>
+        /// Our name.
+        /// </summary>
+        private string _localHostName;
 
         /// <summary>
         /// Hash table for address resolution; outer hash finds the dictionary
