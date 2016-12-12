@@ -22,10 +22,11 @@ namespace IFS.EFTP
         {
             _data = data;
             _channel = channel;
+            _sendDone = false;
 
             _workerThread = new Thread(SendWorker);
             _workerThread.Start();
-
+            
             channel.OnDestroy += OnChannelDestroyed;
         }
 
@@ -49,17 +50,25 @@ namespace IFS.EFTP
                 }                
             }
             _data.Close();
+            _sendDone = true;
+
+            EFTPManager.DestroyChannel(_channel);
         }
 
         private void OnChannelDestroyed()
         {
-            _workerThread.Abort();
-            _data.Close();
+            if (!_sendDone)
+            {
+                _workerThread.Abort();
+                _data.Close();
+            }            
         }
 
         private Thread _workerThread;
 
         private EFTPChannel _channel;
         private Stream _data;
+
+        private bool _sendDone;
     }
 }

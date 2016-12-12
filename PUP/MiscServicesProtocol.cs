@@ -1,5 +1,6 @@
 ﻿using IFS.Boot;
 using IFS.EFTP;
+using IFS.Gateway;
 using IFS.Logging;
 using IFS.Mail;
 using System;
@@ -53,8 +54,7 @@ namespace IFS
     {
         public MiscServicesProtocol()
         {
-            // TODO:
-            // load host tables, etc.
+            
         }
 
         /// <summary>
@@ -123,7 +123,7 @@ namespace IFS
             PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.SourcePort.Socket);
             PUP response = new PUP(PupType.StringTimeReply, p.ID, p.SourcePort, localPort, timeString);
 
-            PUPProtocolDispatcher.Instance.SendPup(response);
+            Router.Instance.SendPup(response);
         }
 
         private void SendAltoTimeReply(PUP p)
@@ -166,7 +166,7 @@ namespace IFS
 
             PUP response = new PUP(PupType.AltoTimeResponse, p.ID, remotePort, localPort, Serializer.Serialize(time));
 
-            PUPProtocolDispatcher.Instance.SendPup(response);
+            Router.Instance.SendPup(response);
         }
 
         private void SendAddressLookupReply(PUP p)
@@ -201,7 +201,7 @@ namespace IFS
                 PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
                 PUP lookupReply = new PUP(PupType.AddressLookupResponse, p.ID, p.SourcePort, localPort, interNetworkName);
 
-                PUPProtocolDispatcher.Instance.SendPup(lookupReply);
+                Router.Instance.SendPup(lookupReply);
             }
             else
             {
@@ -210,7 +210,7 @@ namespace IFS
                 PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
                 PUP errorReply = new PUP(PupType.DirectoryLookupErrorReply, p.ID, p.SourcePort, localPort, Helpers.StringToArray(errorString));
 
-                PUPProtocolDispatcher.Instance.SendPup(errorReply);
+                Router.Instance.SendPup(errorReply);
             }
         }
 
@@ -241,7 +241,7 @@ namespace IFS
                 PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
                 PUP lookupReply = new PUP(PupType.NameLookupResponse, p.ID, p.SourcePort, localPort, lookupPort.ToArray());
 
-                PUPProtocolDispatcher.Instance.SendPup(lookupReply);
+                Router.Instance.SendPup(lookupReply);
             }
             else
             {
@@ -250,7 +250,7 @@ namespace IFS
                 PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
                 PUP errorReply = new PUP(PupType.DirectoryLookupErrorReply, p.ID, p.SourcePort, localPort, Helpers.StringToArray(errorString));
 
-                PUPProtocolDispatcher.Instance.SendPup(errorReply);
+                Router.Instance.SendPup(errorReply);
             }
         }
 
@@ -310,7 +310,7 @@ namespace IFS
                 {
                     PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
                     PUP bootDirReply = new PUP(PupType.BootDirectoryReply, p.ID, p.SourcePort, localPort, ms.ToArray());
-                    PUPProtocolDispatcher.Instance.SendPup(bootDirReply);
+                    Router.Instance.SendPup(bootDirReply);
 
                     ms.Seek(0, SeekOrigin.Begin);
                     ms.SetLength(0);
@@ -322,7 +322,7 @@ namespace IFS
             {
                 PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
                 PUP bootDirReply = new PUP(PupType.BootDirectoryReply, p.ID, p.SourcePort, localPort, ms.ToArray());
-                PUPProtocolDispatcher.Instance.SendPup(bootDirReply);
+                Router.Instance.SendPup(bootDirReply);
             }
 
         }
@@ -358,7 +358,7 @@ namespace IFS
                 PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
                 PUP errorReply = new PUP(PupType.AuthenticateNegativeResponse, p.ID, p.SourcePort, localPort, Helpers.StringToArray(errorString));
 
-                PUPProtocolDispatcher.Instance.SendPup(errorReply);
+                Router.Instance.SendPup(errorReply);
             }
             else
             {
@@ -366,7 +366,7 @@ namespace IFS
                 PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
                 PUP okReply = new PUP(PupType.AuthenticatePositiveResponse, p.ID, p.SourcePort, localPort, new byte[] { });
 
-                PUPProtocolDispatcher.Instance.SendPup(okReply);
+                Router.Instance.SendPup(okReply);
             }
         }
 
@@ -385,10 +385,7 @@ namespace IFS
             // If mailbox name has a host/registry appended, we will strip it off.
             // TODO: probably should validate host...
             //
-            if (mailboxName.Contains("."))
-            {
-                mailboxName = mailboxName.Substring(0, mailboxName.IndexOf("."));
-            }
+            mailboxName = Authentication.GetUserNameFromFullName(mailboxName);            
 
             IEnumerable<string> mailList = MailManager.EnumerateMail(mailboxName);
 
@@ -397,14 +394,14 @@ namespace IFS
                 PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
                 PUP noMailReply = new PUP(PupType.NoNewMailExistsReply, p.ID, p.SourcePort, localPort, new byte[] { });
 
-                PUPProtocolDispatcher.Instance.SendPup(noMailReply);
+                Router.Instance.SendPup(noMailReply);
             }
             else
             {
                 PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
                 PUP mailReply = new PUP(PupType.NewMailExistsReply, p.ID, p.SourcePort, localPort, Helpers.StringToArray("You've got mail!"));
 
-                PUPProtocolDispatcher.Instance.SendPup(mailReply);
+                Router.Instance.SendPup(mailReply);
             }
         }
 

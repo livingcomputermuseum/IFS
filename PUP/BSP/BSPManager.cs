@@ -1,4 +1,5 @@
-﻿using IFS.Logging;
+﻿using IFS.Gateway;
+using IFS.Logging;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -23,37 +24,37 @@ namespace IFS.BSP
     {
         public BSPWorkerBase(BSPChannel channel)
         {
-            _channel = channel;
+            Channel = channel;
         }
 
         public abstract void Terminate();
                     
         public WorkerExitDelegate OnExit;
 
-        protected BSPChannel _channel;
+        public BSPChannel Channel;
     }
 
     /// <summary>
-    /// Manages active BSP channels and creates new ones as necessary, invoking the associated
-    /// protocol handlers.
+    /// Manages active BSP channels and creates new ones as necessary, invoking the protocol handler
+    /// associated with the socket.
+    /// 
     /// Dispatches PUPs to the appropriate BSP channel.
     /// </summary>
     public static class BSPManager
     {
         static BSPManager()
-        {
-            //
-            // Initialize the socket ID counter; we start with a
-            // number beyond the range of well-defined sockets.
-            // For each new BSP channel that gets opened, we will
-            // increment this counter to ensure that each channel gets
-            // a unique ID.  (Well, until we wrap around...)
-            //
-            _nextSocketID = _startingSocketID;
-
+        {            
             _activeChannels = new Dictionary<uint, BSPChannel>();
 
             _workers = new List<BSPWorkerBase>(Configuration.MaxWorkers);
+        }
+
+        public static void Shutdown()
+        {
+            foreach(BSPWorkerBase worker in _workers)
+            {
+                worker.Terminate();
+            }
         }
 
         /// <summary>
@@ -68,8 +69,8 @@ namespace IFS.BSP
                 Log.Write(LogType.Error, LogComponent.RTP, "Expected RFC pup, got {0}", p.Type);
                 return;
             }
-            
-            UInt32 socketID = GetNextSocketID();
+
+            UInt32 socketID = SocketIDGenerator.GetNextSocketID();
             BSPChannel newChannel = new BSPChannel(p, socketID);
             newChannel.OnDestroy += OnChannelDestroyed;
             _activeChannels.Add(socketID, newChannel); 
@@ -78,7 +79,7 @@ namespace IFS.BSP
             // Initialize the worker for this channel.
             InitializeWorkerForChannel(newChannel, workerType);
 
-            // Send RFC response to complete the rendezvous.
+            // Send RFC response to complete the rendezvous:
 
             // Modify the destination port to specify our network
             PUPPort sourcePort = p.DestinationPort;
@@ -89,7 +90,7 @@ namespace IFS.BSP
                 "Establishing Rendezvous, ID {0}, Server port {1}, Client port {2}.", 
                 p.ID, newChannel.ServerPort, newChannel.ClientPort);
 
-            PUPProtocolDispatcher.Instance.SendPup(rfcResponse);
+            Router.Instance.SendPup(rfcResponse);
         }
 
         /// <summary>
@@ -203,6 +204,20 @@ namespace IFS.BSP
             _activeChannels.Remove(channel.ServerPort.Socket);
         }
 
+        public static List<BSPWorkerBase> EnumerateActiveWorkers()
+        {
+            return _workers;
+
+        }
+
+        public static int WorkerCount
+        {
+            get
+            {
+                return _workers.Count();
+            }
+        }
+
         /// <summary>
         /// Finds the appropriate channel for the given PUP.
         /// </summary>
@@ -218,31 +233,7 @@ namespace IFS.BSP
             {
                 return null;
             }
-        }
-
-        /// <summary>
-        /// Generates a unique Socket ID.
-        /// </summary>
-        /// <returns></returns>
-        private static UInt32 GetNextSocketID()
-        {
-            UInt32 next = _nextSocketID;
-
-            _nextSocketID++;
-
-            //
-            // Handle the wrap around case (which we're very unlikely to
-            // ever hit, but why not do the right thing).
-            // Start over at the initial ID.  This is very unlikely to
-            // collide with any pending channels.
-            //
-            if(_nextSocketID < _startingSocketID)
-            {
-                _nextSocketID = _startingSocketID;
-            }
-
-            return next;
-        }
+        }        
 
         private static void InitializeWorkerForChannel(BSPChannel channel, Type workerType)
         {
@@ -260,15 +251,7 @@ namespace IFS.BSP
                 // Send an Abort with an informative message.
                 channel.SendAbort("IFS Server full, try again later.");
             }
-        }        
-
-        public static int WorkerCount
-        {
-            get
-            {
-                return _workers.Count();
-            }
-        }
+        }                              
 
         private static void OnWorkerExit(BSPWorkerBase destroyed)
         {            
@@ -284,8 +267,5 @@ namespace IFS.BSP
         /// Map from socket address to BSP channel
         /// </summary>
         private static Dictionary<UInt32, BSPChannel> _activeChannels;
-
-        private static UInt32 _nextSocketID;
-        private static readonly UInt32 _startingSocketID = 0x1000;
     }
 }

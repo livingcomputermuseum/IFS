@@ -36,6 +36,11 @@ namespace IFS
         public int Length;
     }
 
+    /// <summary>
+    /// Provides a framework for serialization and deserialization of properly annotated
+    /// structs and classes; used to take raw data from the wire and reconstitute them into
+    /// IFS objects, and turn those objects back into a bag of bytes that meet IFS specs.
+    /// </summary>
     public static class Serializer
     {
 

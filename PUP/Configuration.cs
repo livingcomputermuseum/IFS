@@ -198,7 +198,6 @@ namespace IFS
                                             field.SetValue(null, Enum.Parse(typeof(LogComponent), value, true));
                                         }
                                         break;
-
                                 }
                             }
                             catch
@@ -207,9 +206,7 @@ namespace IFS
                                     "ifs.cfg line {0}: Value '{1}' is invalid for parameter '{2}'.", lineNumber, value, parameter);
                             }
                         }
-
                     }
-
 
                     if (!bMatch)
                     {

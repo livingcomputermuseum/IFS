@@ -1,17 +1,12 @@
 ﻿using IFS.BSP;
 using IFS.EFTP;
 using IFS.Logging;
-using IFS.Transport;
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-using PcapDotNet.Base;
-using System.Net.NetworkInformation;
-using PcapDotNet.Core;
+using IFS.CopyDisk;
+using IFS.FTP;
+using IFS.Gateway;
 
 namespace IFS
 {   
@@ -23,74 +18,21 @@ namespace IFS
         /// <summary>
         /// Private Constructor for this class, enforcing Singleton usage.
         /// </summary>
-        private PUPProtocolDispatcher()
+        public PUPProtocolDispatcher()
         {
-            _dispatchMap = new Dictionary<uint, PUPProtocolEntry>();           
-        }
+            _dispatchMap = new Dictionary<uint, PUPProtocolEntry>();
 
-        /// <summary>
-        /// Accessor for singleton instance of this class.
-        /// </summary>
-        public static PUPProtocolDispatcher Instance
-        {
-            get { return _instance; }
-        }
-
-        public void RegisterRAWInterface(LivePacketDevice iface)
-        {
-            Ethernet enet = new Ethernet(iface);
-
-            _pupPacketInterface = enet; 
-            _rawPacketInterface = enet;
-            _pupPacketInterface.RegisterReceiveCallback(OnPupReceived);
-        }
-
-        public void RegisterUDPInterface(NetworkInterface iface)
-        {
-            UDPEncapsulation udp = new UDPEncapsulation(iface);
-
-            _pupPacketInterface = udp;
-            _rawPacketInterface = udp;
-            _pupPacketInterface.RegisterReceiveCallback(OnPupReceived);
-        }
-
-        /// <summary>
-        /// Registers a new protocol with the dispatcher.
-        /// </summary>
-        /// <param name="reg"></param>
-        /// <param name="impl"></param>
-        public void RegisterProtocol(PUPProtocolEntry entry)
-        {
-            if (_dispatchMap.ContainsKey(entry.Socket))
-            {
-                throw new InvalidOperationException(
-                    String.Format("Socket {0} has already been registered for protocol {1}", entry.Socket, _dispatchMap[entry.Socket].FriendlyName));
-            }
-
-            _dispatchMap[entry.Socket] = entry;
-        }
-
-        public void SendPup(PUP p)
-        {
-            // drop every 10th packet for testing
-            _packet++;
-
-           // if ((_packet % 10) != 5)
-            {
-                _pupPacketInterface.Send(p);
-            }
+            RegisterProtocols();
+        }   
         
-        }
-
-        public void Send(byte[] data, byte source, byte destination, ushort frameType)
+        public void Shutdown()
         {
-            if (_rawPacketInterface != null)
-            {
-                _rawPacketInterface.Send(data, source, destination, frameType);
-            }
-        }        
+            _breathOfLifeServer.Shutdown();
+            BSPManager.Shutdown();
+            //EFTPManager.Shutdown();
+        }                    
 
-        private void OnPupReceived(PUP pup)
+        public void ReceivePUP(PUP pup)
         {
             //
             // Filter out packets not destined for us.
@@ -122,9 +64,7 @@ namespace IFS
                 else
                 {
                     // RTP / BSP protocol.  Pass this to the BSP handler to set up a channel.
-                    Log.Write(LogType.Verbose, LogComponent.PUP, "Dispatching PUP (source {0}, dest {1}) to BSP protocol for {0}.", pup.SourcePort, pup.DestinationPort, entry.FriendlyName);
-                    //entry.ProtocolImplementation.RecvData(pup);
-
+                    Log.Write(LogType.Verbose, LogComponent.PUP, "Dispatching PUP (source {0}, dest {1}) to BSP protocol for {0}.", pup.SourcePort, pup.DestinationPort, entry.FriendlyName);                    
                     BSPManager.EstablishRendezvous(pup, entry.WorkerType);
                 }
             }
@@ -143,24 +83,48 @@ namespace IFS
                 Log.Write(LogType.Normal, LogComponent.PUP, "Unhandled PUP protocol, source socket {0}, destination socket {1}, type {2}, dropped packet.", pup.SourcePort.Socket, pup.DestinationPort.Socket, pup.Type);
             }            
         }
-      
-        /// <summary>
-        /// Our interface to a facility that can transmit/receive PUPs
-        /// </summary>
-        private IPupPacketInterface _pupPacketInterface;
 
         /// <summary>
-        /// Our interface to a facility that can transmit raw Ethernet frames
+        /// Registers a new protocol with the dispatcher.
         /// </summary>
-        private IRawPacketInterface _rawPacketInterface;
+        /// <param name="reg"></param>
+        /// <param name="impl"></param>
+        private void RegisterProtocol(PUPProtocolEntry entry)
+        {
+            if (_dispatchMap.ContainsKey(entry.Socket))
+            {
+                throw new InvalidOperationException(
+                    String.Format("Socket {0} has already been registered for protocol {1}", entry.Socket, _dispatchMap[entry.Socket].FriendlyName));
+            }
+
+            _dispatchMap[entry.Socket] = entry;
+        }
+
+        private void RegisterProtocols()
+        {
+            // Set up protocols:
+
+            // Connectionless
+            RegisterProtocol(new PUPProtocolEntry("Gateway Information", 2, ConnectionType.Connectionless, new GatewayInformationProtocol()));
+            RegisterProtocol(new PUPProtocolEntry("Misc Services", 0x4, ConnectionType.Connectionless, new MiscServicesProtocol()));
+            RegisterProtocol(new PUPProtocolEntry("Echo", 0x5, ConnectionType.Connectionless, new EchoProtocol()));
+
+            // RTP/BSP based:            
+            RegisterProtocol(new PUPProtocolEntry("CopyDisk", 0x15  /* 25B */, ConnectionType.BSP, typeof(CopyDiskWorker)));
+            RegisterProtocol(new PUPProtocolEntry("FTP", 0x3, ConnectionType.BSP, typeof(FTPWorker)));
+            RegisterProtocol(new PUPProtocolEntry("Mail", 0x7, ConnectionType.BSP, typeof(FTPWorker)));
+
+            // Breath Of Life
+            _breathOfLifeServer = new BreathOfLife();
+        }
 
         /// <summary>
         /// Map from socket to protocol implementation
         /// </summary>
         private Dictionary<UInt32, PUPProtocolEntry> _dispatchMap;
 
-        private int _packet;
-
-        private static PUPProtocolDispatcher _instance = new PUPProtocolDispatcher();
+        //
+        // Breath of Life server, which is its own thing.
+        private BreathOfLife _breathOfLifeServer;
     }
 }

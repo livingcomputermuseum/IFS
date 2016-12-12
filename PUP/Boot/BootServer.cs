@@ -29,6 +29,7 @@ namespace IFS.Boot
         {
             _numberToNameTable = new Dictionary<ushort, string>();            
 
+            // TODO: fix hardcoded path
             using (StreamReader sr = new StreamReader("Conf\\bootdirectory.txt"))
             {
                 int lineNumber = 0;
@@ -66,7 +67,7 @@ namespace IFS.Boot
                         catch
                         {
                             Log.Write(LogType.Warning, LogComponent.BootServer,
-                                "bootdirectory.txt line {0}: Invalid syntax: '{1}' is not a valid integer value.", lineNumber, tokens[0]);
+                                "bootdirectory.txt line {0}: Invalid syntax: '{1}' is not a valid octal integer value.", lineNumber, tokens[0]);
                             continue;
                         }
 

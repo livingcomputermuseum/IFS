@@ -9,8 +9,6 @@ using System.Threading.Tasks;
 
 namespace IFS
 {
-
-
     /// <summary>
     /// Provides very (very) rudimentary security.
     /// Exposes facilities for user authentication (via password) and
@@ -20,11 +18,14 @@ namespace IFS
     /// (or deal with the security issues that would entail)
     /// so IFS usernames/passwords are completely separate entities from Windows auth 
     /// and access is controlled very coarsely.  (More fine-grained ACLs are really overkill for the
-    /// use-cases we need for IFS).
+    /// use-cases we need for IFS, at least at this time.)
     /// 
     /// Accounts are split into two categories:  Users and Administrators.
     /// Users can read any file, but can only write files in their home directory.
     /// Administrators can read/write files in any directory.
+    /// 
+    /// The concept of a "guest" account is provided -- this user has no home directory and has read-only
+    /// access only to specifically marked public directories.
     /// </summary>
     public static class Authentication
     {
@@ -51,8 +52,7 @@ namespace IFS
         }
 
         public static UserToken Authenticate(string userName, string password)
-        {            
-
+        {
             //
             // Look up the user
             //
@@ -212,6 +212,7 @@ namespace IFS
 
         /// <summary>
         /// Given a full user name (i.e. username.HOST), returns only the username portion.
+        /// (Given just a username, returns it unchanged.)
         /// </summary>
         /// <param name="fullUserName"></param>
         /// <returns></returns>

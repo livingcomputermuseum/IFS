@@ -230,7 +230,7 @@ namespace IFS
         }
 
         /// <summary>
-        /// 
+        /// Same as above, no garbage byte.
         /// </summary>
         /// <param name="type"></param>
         /// <param name="id"></param>
@@ -300,7 +300,7 @@ namespace IFS
 
             if (Checksum != 0xffff && cChecksum != Checksum)
             {
-                // TODO: determine what to do with packets that are corrupted.
+                // TODO: determine what to do with packets that are corrupted -- drop, or continue anyway?
                 Log.Write(LogType.Warning, LogComponent.PUP, "PUP checksum is invalid. (got {0:x}, expected {1:x})", Checksum, cChecksum);
             }
 

@@ -20,7 +20,7 @@ namespace IFS.Mail
     /// name.  Authentication is handled as one would expect -- each user has read/delete 
     /// access only to his/her own mailbox, all other mailboxes can only be sent to.
     /// 
-    /// Mailbox directories are lazy-init -- they're only created when a user receives an
+    /// Mailbox directories are lazy-init -- they're only created when a user first receives an
     /// e-mail.
     /// 
     /// The guest account has its own mailbox, shared by all guest users.

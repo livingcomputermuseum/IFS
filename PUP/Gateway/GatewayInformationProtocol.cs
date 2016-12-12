@@ -1,11 +1,12 @@
-﻿using IFS.Logging;
+﻿using IFS.Gateway;
+using IFS.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace IFS
+namespace IFS.Gateway
 {
     public struct GatewayInformation
     {
@@ -82,7 +83,7 @@ namespace IFS
 
             PUP response = new PUP(PupType.GatewayInformationResponse, p.ID, remotePort, localPort, Serializer.Serialize(info));
 
-            PUPProtocolDispatcher.Instance.SendPup(response);
+            Router.Instance.SendPup(response);
         }
 
     }

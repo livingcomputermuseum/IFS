@@ -13,91 +13,88 @@ using IFS.Logging;
 using System.IO;
 using System.Net.NetworkInformation;
 using System.Threading;
+using IFS.Gateway;
 
 namespace IFS.Transport
 {
     /// <summary>
-    /// Defines interface "to the metal" (raw ethernet frames) which may wrap the underlying transport (for example, winpcap)
+    /// Defines interface "to the metal" (raw ethernet frames) using WinPCAP to send and receive Ethernet
+    /// frames.
+    /// 
+    /// Ethernet packets are broadcast.  See comments in UDP.cs for the reasoning behind this.
+    /// 
     /// </summary>
     public class Ethernet : IPupPacketInterface, IRawPacketInterface
     {
         public Ethernet(LivePacketDevice iface)
         {
-            _interface = iface;
-
-            // Set up maps
-            _pupToEthernetMap = new Dictionary<byte, MacAddress>(256);
-            _ethernetToPupMap = new Dictionary<MacAddress, byte>(256);
+            _interface = iface;            
         }
 
-        public void RegisterReceiveCallback(HandlePup callback)
+        public void RegisterRouterCallback(RoutePupCallback callback)
         {
-            _callback = callback;
+            _routerCallback = callback;
 
             // Now that we have a callback we can start receiving stuff.
-            Open(true /* promiscuous */, int.MaxValue);
+            Open(false /* not promiscuous */, int.MaxValue);
 
             // Kick off the receiver thread, this will never return or exit.
             Thread receiveThread = new Thread(new ThreadStart(BeginReceive));
             receiveThread.Start();
+        }
+
+        public void Shutdown()
+        {
+            _routerCallback = null;
+            _communicator.Break();                        
         }
         
         public void Send(PUP p)
         {
             //
             // Write PUP to ethernet:
-            // Get destination network & host address from PUP and route to correct ethernet address.
-            // For now, no actual routing (Gateway not implemented yet), everything is on the same 'net.
-            // Just look up host address and find the MAC of the host to send it to.            
-            //           
-            if (_pupToEthernetMap.ContainsKey(p.DestinationPort.Host))
+            //
+            
+            // Build the outgoing data; this is:
+            // 1st word: length of data following
+            // 2nd word: 3mbit destination / source bytes
+            // 3rd word: frame type (PUP)
+            byte[] encapsulatedFrame = new byte[6 + p.RawData.Length];
+
+            // 3mbit Packet length
+            encapsulatedFrame[0] = (byte)((p.RawData.Length / 2 + 2) >> 8);
+            encapsulatedFrame[1] = (byte)(p.RawData.Length / 2 + 2);
+
+            // addressing
+            encapsulatedFrame[2] = p.DestinationPort.Host;
+            encapsulatedFrame[3] = p.SourcePort.Host;                                
+
+            // frame type
+            encapsulatedFrame[4] = (byte)(_pupFrameType >> 8);
+            encapsulatedFrame[5] = (byte)_pupFrameType;
+
+            // Actual data
+            p.RawData.CopyTo(encapsulatedFrame, 6);
+
+            MacAddress destinationMac = new MacAddress(_10mbitBroadcast);
+
+            // Build the outgoing packet; place the source/dest addresses, type field and the PUP data.                
+            EthernetLayer ethernetLayer = new EthernetLayer
             {
-                // Build the outgoing data; this is:
-                // 1st word: length of data following
-                // 2nd word: 3mbit destination / source bytes
-                // 3rd word: frame type (PUP)
-                byte[] encapsulatedFrame = new byte[6 + p.RawData.Length];
+                Source = _interface.GetMacAddress(),
+                Destination = destinationMac,
+                EtherType = (EthernetType)_3mbitFrameType,
+            };                
 
-                // 3mbit Packet length
-                encapsulatedFrame[0] = (byte)((p.RawData.Length / 2 + 2) >> 8);
-                encapsulatedFrame[1] = (byte)(p.RawData.Length / 2 + 2);
-
-                // addressing
-                encapsulatedFrame[2] = p.DestinationPort.Host;
-                encapsulatedFrame[3] = p.SourcePort.Host;                                
-
-                // frame type
-                encapsulatedFrame[4] = (byte)(_pupFrameType >> 8);
-                encapsulatedFrame[5] = (byte)_pupFrameType;
-
-                // Actual data
-                p.RawData.CopyTo(encapsulatedFrame, 6);                
-
-                MacAddress destinationMac = _pupToEthernetMap[p.DestinationPort.Host];
-
-                // Build the outgoing packet; place the source/dest addresses, type field and the PUP data.                
-                EthernetLayer ethernetLayer = new EthernetLayer
-                {
-                    Source = _interface.GetMacAddress(),
-                    Destination = destinationMac,
-                    EtherType = (EthernetType)_3mbitFrameType,
-                };                
-
-                PayloadLayer payloadLayer = new PayloadLayer
-                {
-                    Data = new Datagram(encapsulatedFrame),
-                };
-
-                PacketBuilder builder = new PacketBuilder(ethernetLayer, payloadLayer);
-
-                // Send it over the 'net!
-                _communicator.SendPacket(builder.Build(DateTime.Now));
-            }
-            else
+            PayloadLayer payloadLayer = new PayloadLayer
             {
-                // Log error, this should not happen.
-                Log.Write(LogType.Error, LogComponent.Ethernet, String.Format("PUP destination address {0} is unknown.", p.DestinationPort.Host));
-            }
+                Data = new Datagram(encapsulatedFrame),
+            };
+
+            PacketBuilder builder = new PacketBuilder(ethernetLayer, payloadLayer);
+
+            // Send it over the 'net!
+            _communicator.SendPacket(builder.Build(DateTime.Now));            
         }
 
         public void Send(byte[] data, byte source, byte destination, ushort frameType)
@@ -122,33 +119,8 @@ namespace IFS.Transport
 
             // Actual data
             data.CopyTo(encapsulatedFrame, 6);
-
-            // Byte swap
-            // encapsulatedFrame = ByteSwap(encapsulatedFrame);
-
-            MacAddress destinationMac;
-            if (destination != 0xff)
-            {
-                if (_pupToEthernetMap.ContainsKey(destination))
-                {
-                    //
-                    // Use the existing map.
-                    //
-                    destinationMac = _pupToEthernetMap[destination];
-                }
-                else
-                {
-                    //
-                    // Nothing mapped for this PUP, do our best with it.
-                    //
-                    destinationMac = new MacAddress((UInt48)(_10mbitMACPrefix | destination));
-                }
-            }
-            else
-            {
-                // 3mbit broadcast becomes 10mbit broadcast
-                destinationMac = new MacAddress(_10mbitBroadcast);
-            }
+            
+            MacAddress destinationMac = new MacAddress(_10mbitBroadcast);            
 
             // Build the outgoing packet; place the source/dest addresses, type field and the PUP data.                
             EthernetLayer ethernetLayer = new EthernetLayer
@@ -193,24 +165,17 @@ namespace IFS.Transport
 
                 if (etherType3mbit == _pupFrameType)
                 {
-                    PUP pup = new PUP(packetStream, length);
+                    try
+                    {
+                        PUP pup = new PUP(packetStream, length);                        
+                        _routerCallback(pup);
+                    }
+                    catch(Exception e)
+                    {
+                        // An error occurred, log it.
+                        Log.Write(LogType.Error, LogComponent.PUP, "Error handling PUP: {0}", e.Message);
+                    }
 
-                    //
-                    // Check the network -- if this is not network zero (coming from a host that doesn't yet know what
-                    // network it's on, or specifying the current network) or the network we're on, we will ignore it (for now).  Once we implement
-                    // Gateway services we will handle these appropriately (at a higher, as-yet-unimplemented layer between this
-                    // and the Dispatcher).
-                    //
-                    if (pup.DestinationPort.Network == 0 || pup.DestinationPort.Network == DirectoryServices.Instance.LocalHostAddress.Network)
-                    {
-                        UpdateMACTable(pup, p);
-                        _callback(pup);
-                    }
-                    else
-                    {
-                        // Not for our network.
-                        Log.Write(LogType.Verbose, LogComponent.Ethernet, "PUP is for network {0}, dropping.", pup.DestinationPort.Network);
-                    }
                 }
                 else
                 {
@@ -240,45 +205,11 @@ namespace IFS.Transport
         private void BeginReceive()
         {
             _communicator.ReceivePackets(-1, ReceiveCallback);
-        }
-
-        private void UpdateMACTable(PUP p, Packet e)
-        {
-            //
-            // See if we already have this entry.
-            //
-            if (_pupToEthernetMap.ContainsKey(p.SourcePort.Host))
-            {
-                // 
-                // We do; ensure that the mac addresses match -- if not we have a duplicate
-                // PUP host id on the network.
-                //
-                if (_pupToEthernetMap[p.SourcePort.Host] != e.Ethernet.Source)
-                {
-                    Log.Write(LogType.Error, LogComponent.Ethernet,
-                        "Duplicate host ID {0} for MAC {1} (currently mapped to MAC {2})",
-                        p.SourcePort.Host,
-                        e.Ethernet.Source,
-                        _pupToEthernetMap[p.SourcePort.Host]);
-                }
-            }
-            else
-            {
-                // Add a mapping in both directions
-                _pupToEthernetMap.Add(p.SourcePort.Host, e.Ethernet.Source);
-                _ethernetToPupMap.Add(e.Ethernet.Source, p.SourcePort.Host);
-            }
         }        
-
-        /// <summary>
-        /// PUP<->Ethernet address map
-        /// </summary>
-        private Dictionary<byte, MacAddress> _pupToEthernetMap;
-        private Dictionary<MacAddress, byte> _ethernetToPupMap;
 
         private LivePacketDevice _interface;
         private PacketCommunicator _communicator;
-        private HandlePup _callback;
+        private RoutePupCallback _routerCallback;
 
         // Constants
 
@@ -286,11 +217,7 @@ namespace IFS.Transport
         private readonly ushort _pupFrameType = 512;
 
         // The type used for 3mbit frames encapsulated in 10mb frames
-        private readonly int _3mbitFrameType = 0xbeef;     // easy to identify, ostensibly unused by anything of any import
-
-        // 5 byte prefix for 3mbit->10mbit addresses when sending raw frames; this is the convention ContrAlto uses.
-        // TODO: this should be configurable.
-        private UInt48 _10mbitMACPrefix = 0x0000aa010200;  // 00-00-AA is the Xerox vendor code, used just to be cute.  
+        private readonly int _3mbitFrameType = 0xbeef;     // easy to identify, ostensibly unused by anything of any import        
 
         // 10mbit broadcast address
         private UInt48 _10mbitBroadcast = (UInt48)0xffffffffffff;

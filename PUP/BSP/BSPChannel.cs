@@ -1,4 +1,5 @@
-﻿using IFS.Logging;
+﻿using IFS.Gateway;
+using IFS.Logging;
 
 using System;
 using System.Collections.Generic;
@@ -111,11 +112,11 @@ namespace IFS.BSP
         public void End(PUP p)
         {
             PUP endReplyPup = new PUP(PupType.EndReply, p.ID, _clientConnectionPort, _serverConnectionPort, new byte[0]);
-            PUPProtocolDispatcher.Instance.SendPup(endReplyPup);
+            Router.Instance.SendPup(endReplyPup);
 
             // "The receiver of the End PUP responds by returning an EndReply Pup with matching ID and then 
             //  _dallying_ up to some reasonably long timeout interval (say, 10 seconds) in order to respond to
-            // a retransmitted End Pup should its initial EndReply be lost.  If and when the dallying end of  the
+            // a retransmitted End Pup should its initial EndReply be lost.  If and when the dallying end of the
             // stream connection receives its EndReply, it may immediately self destruct."
             // TODO: actually make this happen...
 
@@ -123,6 +124,7 @@ namespace IFS.BSP
 
         /// <summary>
         /// Reads data from the channel (i.e. from the client).  Will block if not all the requested data is available.
+        /// If a Mark byte is encountered, will return a short read.
         /// </summary>
         /// <returns></returns>
         public int Read(ref byte[] data, int count)
@@ -305,18 +307,8 @@ namespace IFS.BSP
                 }
             }
 
-            // If we are over our high watermark, we will drop the data (and not send an ACK even if requested).
-            // Clients should be honoring the limits we set in the RFC packets.
             _inputLock.EnterUpgradeableReadLock();
-
-            /*
-            if (_inputQueue.Count + dataPUP.Contents.Length > MaxBytes)
-            {
-                Log.Write(LogLevel.Error, "Queue larger than {0} bytes, dropping.");
-                _inputLock.ExitUpgradeableReadLock();
-                return;                
-            } */
-
+          
             // Sanity check on expected position from sender vs. received data on our end.
             // If they don't match then we've lost a packet somewhere.
             if (dataPUP.ID != _recvPos)
@@ -421,7 +413,7 @@ namespace IFS.BSP
                     }
 
                     // Send the data.
-                    PUP dataPup = new PUP(flush? PupType.AData : PupType.Data, _sendPos, _clientConnectionPort, _serverConnectionPort, chunk);
+                    PUP dataPup = new PUP(flush ? PupType.AData : PupType.Data, _sendPos, _clientConnectionPort, _serverConnectionPort, chunk);
                     SendDataPup(dataPup);
                 }
             }
@@ -444,7 +436,7 @@ namespace IFS.BSP
             // Send this directly, do not wait for the client to be ready (since it may be wedged, and we don't expect anyone to actually notice
             // this anyway).
             //
-            PUPProtocolDispatcher.Instance.SendPup(abortPup);
+            Router.Instance.SendPup(abortPup);
         }
 
         /// <summary>
@@ -503,7 +495,7 @@ namespace IFS.BSP
 
             PUP ackPup = new PUP(PupType.Ack, _recvPos, _clientConnectionPort, _serverConnectionPort, Serializer.Serialize(ack));            
 
-            PUPProtocolDispatcher.Instance.SendPup(ackPup);
+            Router.Instance.SendPup(ackPup);
 
             Log.Write(LogType.Verbose, LogComponent.BSP, "ACK sent.");
         }
@@ -551,7 +543,7 @@ namespace IFS.BSP
             // Send an empty AData PUP to keep the connection alive and to update the client data stats.
             //
             PUP aData = new PUP(PupType.AData, _sendPos, _clientConnectionPort, _serverConnectionPort, new byte[0]);
-            PUPProtocolDispatcher.Instance.SendPup(aData);
+            Router.Instance.SendPup(aData);
         }
 
         /// <summary>
@@ -656,7 +648,7 @@ namespace IFS.BSP
                     // Send it!
                     //
                     _sendPos += (uint)nextPup.Contents.Length;
-                    PUPProtocolDispatcher.Instance.SendPup(nextPup);
+                    Router.Instance.SendPup(nextPup);
 
                     Log.Write(LogType.Verbose, LogComponent.BSP, "Sent data PUP.  Current position is {0}, output window count is {1}", _sendPos, _outputWindow.Count);
 

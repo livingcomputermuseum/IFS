@@ -80,7 +80,7 @@ namespace IFS.FTP
     {
         public PropertyList()
         {
-            _propertyList = new Dictionary<string, string>();
+            _propertyList = new Dictionary<string, List<string>>();
         }
 
         /// <summary>
@@ -115,11 +115,31 @@ namespace IFS.FTP
         }
 
         /// <summary>
-        /// Returns the value for the specified property, if present.  Otherwise returns null.
+        /// Returns the first value for the specified property, if present.  Otherwise returns null.
         /// </summary>
         /// <param name="name"></param>
         /// <returns></returns>
         public string GetPropertyValue(string name)
+        {
+            name = name.ToLowerInvariant();
+
+            if (_propertyList.ContainsKey(name))
+            {
+                return _propertyList[name][0];
+            }
+            else
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Returns the list of property values associated with the given property name, if present.
+        /// Otherwise returns null.
+        /// </summary>
+        /// <param name="name"></param>
+        /// <returns></returns>
+        public List<string> GetPropertyValues(string name)
         {
             name = name.ToLowerInvariant();
 
@@ -133,17 +153,44 @@ namespace IFS.FTP
             }
         }
 
+        /// <summary>
+        /// Sets a single value for the specified property, if present.
+        /// </summary>
+        /// <param name="name"></param>
+        /// <param name="value"></param>
         public void SetPropertyValue(string name, string value)
         {
-            name = name.ToLowerInvariant();            
+            name = name.ToLowerInvariant();
+
+            List<string> newpList = new List<string>();
+            newpList.Add(value);
 
             if (_propertyList.ContainsKey(name))
-            {
-                _propertyList[name] = value;
+            {                
+                _propertyList[name] = newpList;
             }
             else
             {
-                _propertyList.Add(name, value);
+                _propertyList.Add(name, newpList);
+            }
+        }
+
+        /// <summary>
+        /// Sets multiple values for the specified property, if present.
+        /// </summary>
+        /// <param name="name"></param>
+        /// <param name="value"></param>
+        public void SetPropertyValues(string name, List<string> values)
+        {
+            name = name.ToLowerInvariant();
+
+            if (_propertyList.ContainsKey(name))
+            {
+                _propertyList[name] = values;
+            }
+            else
+            {
+                _propertyList.Add(name, values);
             }
         }
 
@@ -160,7 +207,10 @@ namespace IFS.FTP
 
             foreach(string key in _propertyList.Keys)
             {
-                sb.AppendFormat("({0} {1})", key, EscapeString(_propertyList[key]));                
+                foreach (string value in _propertyList[key])
+                {
+                    sb.AppendFormat("({0} {1})", key, EscapeString(value));
+                }
             }
 
             // Closing paren
@@ -297,17 +347,21 @@ namespace IFS.FTP
                 //
                 if (!_propertyList.ContainsKey(propertyName))
                 {
-                    _propertyList.Add(propertyName, propertyValue.ToString());
+                    // New property key
+                    List<string> newpList = new List<string>();
+                    newpList.Add(propertyValue.ToString());
+                    _propertyList.Add(propertyName, newpList);
                 }
                 else
                 {
-                    throw new InvalidOperationException(String.Format("Duplicate property entry for '{0}", propertyName));
+                    // Property key with multiple values
+                    _propertyList[propertyName].Add(propertyValue.ToString());
                 }                
             }
 
             return index + startOffset + 1;
         }        
 
-        private Dictionary<string, string> _propertyList;
+        private Dictionary<string, List<string>> _propertyList;
     }
 }

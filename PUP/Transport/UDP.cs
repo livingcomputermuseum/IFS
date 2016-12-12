@@ -6,12 +6,43 @@ using System.Threading;
 using System.Net.NetworkInformation;
 using IFS.Logging;
 using System.IO;
+using IFS.Gateway;
 
 namespace IFS.Transport
 {
     /// <summary>
     /// Implements the logic for encapsulating a 3mbit ethernet packet into/out of UDP datagrams.
-    /// Sent packets are broadcast to the subnet.        
+    /// Sent packets are broadcast to the subnet. 
+    /// 
+    /// A brief diversion into the subject of broadcasts and the reason for using them.  (This applies
+    /// to the Ethernet transport as well.)
+    /// 
+    /// Effectively, the IFS suite is implemented on top of a virtual 3 Megabit Ethernet network
+    /// encapsulated over a modern network (UDP over IP, raw Ethernet frames, etc.).  Participants
+    /// on this virtual network are virtual Altos (ContrAlto or others) and real Altos bridged via
+    /// a 3M<->100M device.
+    /// 
+    /// Any of these virtual or real Altos can, at any time, be running in Promiscuous mode, can send
+    /// arbitrary packets with any source or destination address in the header, or send broadcasts.  
+    /// This makes address translation from the virtual (3M) side to the physical (UDP, 100M) side and 
+    /// back again tricky.
+    /// 
+    /// If each participant on the virtual network were to have a table mapping physical (UDP IP, 100M MAC) to
+    /// virtual (3M MAC) addresses then broadcasts could be avoided, but it complicates the logic in all
+    /// parties and requires each user to maintain this mapping table manually.
+    /// 
+    /// Resorting to using broadcasts at all times on the physical network removes these complications and
+    /// makes it easy for end-users to deal with.
+    /// The drawback is that broadcasts can reduce the efficiency of the network segment they're broadcast to.
+    /// However, most Alto networks are extremely quiet (by today's standards) -- the maximum throughput
+    /// of one Alto continuously transferring data to another is on the order of 20-30 kilobytes/sec.  
+    /// (Most of the time, a given Alto will be completely silent.)
+    /// On a modern 100M or 1G network, this is background noise and modern computers receiving these broadcasts
+    /// will hardly notice.
+    /// 
+    /// Based on the above, and after a lot of experimentation, it was decided to err on the side of simplicity 
+    /// and go with the broadcast implementation.
+    /// 
     /// </summary>
     public class UDPEncapsulation : IPupPacketInterface, IRawPacketInterface
     {
@@ -64,12 +95,22 @@ namespace IFS.Transport
             }
         }
 
-        public void RegisterReceiveCallback(HandlePup callback)
+        /// <summary>
+        /// Registers a gateway to handle incoming PUPs.
+        /// </summary>
+        /// <param name="callback"></param>
+        public void RegisterRouterCallback(RoutePupCallback callback)
         {
-            _callback = callback;
+            _routerCallback = callback;
 
             // Now that we have a callback we can start receiving stuff.            
             BeginReceive();
+        }
+
+        public void Shutdown()
+        {            
+            _receiveThread.Abort();
+            _routerCallback = null;
         }
 
         public void Send(PUP p)
@@ -159,22 +200,15 @@ namespace IFS.Transport
 
             if (etherType3mbit == _pupFrameType)
             {
-                PUP pup = new PUP(packetStream, length);
-
-                //
-                // Check the network -- if this is not network zero (coming from a host that doesn't yet know what
-                // network it's on, or specifying the current network) or the network we're on, we will ignore it (for now).  Once we implement
-                // Gateway services we will handle these appropriately (at a higher, as-yet-unimplemented layer between this
-                // and the Dispatcher).
-                //
-                if (pup.DestinationPort.Network == 0 || pup.DestinationPort.Network == DirectoryServices.Instance.LocalHostAddress.Network)
-                {                    
-                    _callback(pup);
-                }
-                else
+                try
                 {
-                    // Not for our network.
-                    Log.Write(LogType.Verbose, LogComponent.Ethernet, "PUP is for network {0}, dropping.", pup.DestinationPort.Network);
+                    PUP pup = new PUP(packetStream, length);
+                    _routerCallback(pup);
+                }
+                catch(Exception e)
+                {
+                    // An error occurred, log it.
+                    Log.Write(LogType.Error, LogComponent.PUP, "Error handling PUP: {0}", e.Message);
                 }
             }
             else
@@ -193,6 +227,9 @@ namespace IFS.Transport
             _receiveThread.Start();
         }
 
+        /// <summary>
+        /// Worker thread for UDP packet receipt.
+        /// </summary>
         private void ReceiveThread()
         {
             // Just call ReceivePackets, that's it.  This will never return.
@@ -232,7 +269,7 @@ namespace IFS.Transport
         // The ethertype used in the encapsulated 3mbit frame
         private readonly ushort _pupFrameType = 512;
 
-        private HandlePup _callback;
+        private RoutePupCallback _routerCallback;
 
         // Thread used for receive
         private Thread _receiveThread;

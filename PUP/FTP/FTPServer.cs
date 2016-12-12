@@ -131,7 +131,7 @@ namespace IFS.FTP
                 if (!(e is ThreadAbortException))
                 {
                     Log.Write(LogType.Error, LogComponent.FTP, "FTP worker thread terminated with exception '{0}'.", e.Message);
-                    _channel.SendAbort("Server encountered an error.");
+                    Channel.SendAbort("Server encountered an error.");
 
                     OnExit(this);
                 }
@@ -300,7 +300,7 @@ namespace IFS.FTP
         {
             // Discard input until we get a Mark.  We should (in general) get a
             // command, followed by EndOfCommand.  
-            FTPCommand command = (FTPCommand)_channel.WaitForMark();
+            FTPCommand command = (FTPCommand)Channel.WaitForMark();
 
             data = ReadNextCommandData();            
 
@@ -344,7 +344,7 @@ namespace IFS.FTP
 
             while(true)
             {
-                int length = _channel.Read(ref buffer, buffer.Length);
+                int length = Channel.Read(ref buffer, buffer.Length);
 
                 ms.Write(buffer, 0, length);
 
@@ -363,7 +363,7 @@ namespace IFS.FTP
             }
 
             data = ms.ToArray();
-            return (FTPCommand)_channel.LastMark;
+            return (FTPCommand)Channel.LastMark;
         }
 
         /// <summary>
@@ -397,8 +397,8 @@ namespace IFS.FTP
                     sb.Append(matchingFile.ToString());
                 }
 
-                _channel.SendMark((byte)FTPCommand.HereIsPropertyList, false);
-                _channel.Send(Helpers.StringToArray(sb.ToString()));
+                Channel.SendMark((byte)FTPCommand.HereIsPropertyList, false);
+                Channel.Send(Helpers.StringToArray(sb.ToString()));
             }
             else
             {
@@ -406,13 +406,13 @@ namespace IFS.FTP
                 // command.
                 foreach (PropertyList matchingFile in files)
                 {
-                    _channel.SendMark((byte)FTPCommand.HereIsPropertyList, false);
-                    _channel.Send(Helpers.StringToArray(matchingFile.ToString()));
+                    Channel.SendMark((byte)FTPCommand.HereIsPropertyList, false);
+                    Channel.Send(Helpers.StringToArray(matchingFile.ToString()));
                 }
             }
 
             // End the enumeration.
-            _channel.SendMark((byte)FTPCommand.EndOfCommand, true);
+            Channel.SendMark((byte)FTPCommand.EndOfCommand, true);
 
         }
 
@@ -460,7 +460,7 @@ namespace IFS.FTP
                     Log.Write(LogType.Verbose, LogComponent.FTP, "Sending file...");
 
                     // Send the file data.
-                    _channel.SendMark((byte)FTPCommand.HereIsFile, true);
+                    Channel.SendMark((byte)FTPCommand.HereIsFile, true);
                     data = new byte[512];
 
                     while (true)
@@ -474,7 +474,7 @@ namespace IFS.FTP
                         }
 
                         Log.Write(LogType.Verbose, LogComponent.FTP, "Sending data, current file position {0}.", outFile.Position);
-                        _channel.Send(data, read, true);
+                        Channel.Send(data, read, true);
 
                         if (read < data.Length)
                         {
@@ -486,13 +486,13 @@ namespace IFS.FTP
 
                 // End the file successfully.  Note that we do NOT send an EOC here.
                 Log.Write(LogType.Verbose, LogComponent.FTP, "Sent.");
-                _channel.SendMark((byte)FTPCommand.Yes, false);
-                _channel.Send(Serializer.Serialize(new FTPYesNoVersion(0, "File transferred successfully.")));
+                Channel.SendMark((byte)FTPCommand.Yes, false);
+                Channel.Send(Serializer.Serialize(new FTPYesNoVersion(0, "File transferred successfully.")));
             }
 
             // End the transfer.
             Log.Write(LogType.Verbose, LogComponent.FTP, "All requested files sent.");
-            _channel.SendMark((byte)FTPCommand.EndOfCommand, true);
+            Channel.SendMark((byte)FTPCommand.EndOfCommand, true);
         }
 
 
@@ -544,7 +544,7 @@ namespace IFS.FTP
             //
             // We now expect a "Here-Is-File"...
             //
-            FTPCommand hereIsFile = (FTPCommand)_channel.WaitForMark();
+            FTPCommand hereIsFile = (FTPCommand)Channel.WaitForMark();
 
             if (hereIsFile != FTPCommand.HereIsFile)
             {
@@ -684,20 +684,20 @@ namespace IFS.FTP
 
                     // End the file successfully.  Note that we do NOT send an EOC here, only after all files have been deleted.
                     Log.Write(LogType.Verbose, LogComponent.FTP, "Deleted.");
-                    _channel.SendMark((byte)FTPCommand.Yes, false);
-                    _channel.Send(Serializer.Serialize(new FTPYesNoVersion(0, "File deleted successfully.")));
+                    Channel.SendMark((byte)FTPCommand.Yes, false);
+                    Channel.Send(Serializer.Serialize(new FTPYesNoVersion(0, "File deleted successfully.")));
                 }
                 catch(Exception e)
                 {
                     // TODO: calculate real NO codes
-                    _channel.SendMark((byte)FTPCommand.No, false);
-                    _channel.Send(Serializer.Serialize(new FTPYesNoVersion((byte)NoCode.AccessDenied, e.Message)));
+                    Channel.SendMark((byte)FTPCommand.No, false);
+                    Channel.Send(Serializer.Serialize(new FTPYesNoVersion((byte)NoCode.AccessDenied, e.Message)));
                 }               
             }
 
             // End the transfer.
             Log.Write(LogType.Verbose, LogComponent.FTP, "All requested files deleted.");
-            _channel.SendMark((byte)FTPCommand.EndOfCommand, true);
+            Channel.SendMark((byte)FTPCommand.EndOfCommand, true);
         }
 
         /// <summary>
@@ -774,13 +774,13 @@ namespace IFS.FTP
                         //
                         // Send the property list (without EOC)
                         //
-                        _channel.SendMark((byte)FTPCommand.HereIsPropertyList, false);
-                        _channel.Send(Helpers.StringToArray(mailProps.ToString()));
+                        Channel.SendMark((byte)FTPCommand.HereIsPropertyList, false);
+                        Channel.Send(Helpers.StringToArray(mailProps.ToString()));
                         
                         //
                         // Send the mail text.
                         //                        
-                        _channel.SendMark((byte)FTPCommand.HereIsFile, true);
+                        Channel.SendMark((byte)FTPCommand.HereIsFile, true);
                         byte[] data = new byte[512];                       
 
                         while (true)
@@ -794,7 +794,7 @@ namespace IFS.FTP
                             }
 
                             Log.Write(LogType.Verbose, LogComponent.FTP, "Sending mail data, current file position {0}.", mailStream.Position);
-                            _channel.Send(data, read, true);
+                            Channel.Send(data, read, true);
 
                             if (read < data.Length)
                             {
@@ -869,7 +869,7 @@ namespace IFS.FTP
             //
             // We now expect a "Here-Is-File"...
             //
-            FTPCommand hereIsFile = (FTPCommand)_channel.WaitForMark();
+            FTPCommand hereIsFile = (FTPCommand)Channel.WaitForMark();
 
             if (hereIsFile != FTPCommand.HereIsFile)
             {
@@ -951,6 +951,9 @@ namespace IFS.FTP
 
         /// <summary>
         /// Enumerates all files in the IFS FTP directory matching the specified specification, and returns a full PropertyList for each.
+        /// 
+        /// We also return all directories to make the directory structure discoverable.  These are enumerated as "dirname <directory>"
+        /// This doesn't match the original IFS behavior but is a lot nicer to deal with as an end-user.
         /// </summary>
         /// <param name="fileSpec"></param>
         /// <returns></returns>
@@ -969,7 +972,31 @@ namespace IFS.FTP
             // These will be absolute paths.
             string[] matchingFiles = Directory.GetFiles(path, fileName, SearchOption.TopDirectoryOnly);
 
-            // Build a property list containing the required properties.
+            // Find all directories that match the fileName, as above.
+            string[] matchingDirectories = Directory.GetDirectories(path, fileName, SearchOption.TopDirectoryOnly);
+
+            // Build a property list containing the required properties for the directories
+            // For now, we ignore any Desired-Property requests (this is legal) and return all properties we know about.
+            foreach (string matchingDirectory in matchingDirectories)
+            {
+                string nameOnly = String.Format("{0}  <directory>", Path.GetFileName(matchingDirectory));
+
+                PropertyList dirProps = new PropertyList();
+
+                dirProps.SetPropertyValue(KnownPropertyNames.ServerFilename, nameOnly);
+                dirProps.SetPropertyValue(KnownPropertyNames.Directory, path);
+                dirProps.SetPropertyValue(KnownPropertyNames.NameBody, nameOnly);
+                dirProps.SetPropertyValue(KnownPropertyNames.Type, "Binary");                  // We treat all files as binary for now
+                dirProps.SetPropertyValue(KnownPropertyNames.ByteSize, "8");                   // 8-bit bytes, please.
+                dirProps.SetPropertyValue(KnownPropertyNames.Version, "1");                    // No real versioning support
+                dirProps.SetPropertyValue(KnownPropertyNames.CreationDate, File.GetCreationTime(matchingDirectory).ToString("dd-MMM-yy HH:mm:ss"));
+                dirProps.SetPropertyValue(KnownPropertyNames.WriteDate, File.GetLastWriteTime(matchingDirectory).ToString("dd-MMM-yy HH:mm:ss"));
+                dirProps.SetPropertyValue(KnownPropertyNames.ReadDate, File.GetLastAccessTime(matchingDirectory).ToString("dd-MMM-yy HH:mm:ss"));
+
+                properties.Add(dirProps);
+            }
+
+            // Build a property list containing the required properties for the files.
             // For now, we ignore any Desired-Property requests (this is legal) and return all properties we know about.
             foreach (string matchingFile in matchingFiles)
             {
@@ -1120,6 +1147,14 @@ namespace IFS.FTP
             string userName = fileSpec.GetPropertyValue(KnownPropertyNames.UserName);
             string password = String.Empty;
 
+            //
+            // If the username is "guest" then we default to the guest account and ignore the password entirely.
+            //
+            if (userName == UserToken.Guest.UserName)
+            {
+                return UserToken.Guest;
+            }
+
             if (fileSpec.ContainsPropertyValue(KnownPropertyNames.UserPassword))
             {
                 password = fileSpec.GetPropertyValue(KnownPropertyNames.UserPassword);
@@ -1129,7 +1164,7 @@ namespace IFS.FTP
 
             if (user == null)
             {
-                SendFTPNoResponse(NoCode.AccessDenied, "Invalid username or password.");
+                SendFTPNoResponse(NoCode.AccessDenied, "Invalid username or password.");                
             }
 
             return user;
@@ -1157,30 +1192,30 @@ namespace IFS.FTP
 
         private void SendFTPResponse(FTPCommand responseCommand, object data)
         {
-            _channel.SendMark((byte)responseCommand, false);
-            _channel.Send(Serializer.Serialize(data));
-            _channel.SendMark((byte)FTPCommand.EndOfCommand, true);
+            Channel.SendMark((byte)responseCommand, false);
+            Channel.Send(Serializer.Serialize(data));
+            Channel.SendMark((byte)FTPCommand.EndOfCommand, true);
         }
 
         private void SendFTPResponse(FTPCommand responseCommand, PropertyList data)
         {
-            _channel.SendMark((byte)responseCommand, false);
-            _channel.Send(Helpers.StringToArray(data.ToString()));
-            _channel.SendMark((byte)FTPCommand.EndOfCommand, true);
+            Channel.SendMark((byte)responseCommand, false);
+            Channel.Send(Helpers.StringToArray(data.ToString()));
+            Channel.SendMark((byte)FTPCommand.EndOfCommand, true);
         }
 
         private void SendFTPNoResponse(NoCode code, string message)
         {
-            _channel.SendMark((byte)FTPCommand.No, false);
-            _channel.Send(Serializer.Serialize(new FTPYesNoVersion((byte)code, message)));
-            _channel.SendMark((byte)FTPCommand.EndOfCommand, true);
+            Channel.SendMark((byte)FTPCommand.No, false);
+            Channel.Send(Serializer.Serialize(new FTPYesNoVersion((byte)code, message)));
+            Channel.SendMark((byte)FTPCommand.EndOfCommand, true);
         }
 
         private void SendFTPYesResponse(string message)
         {
-            _channel.SendMark((byte)FTPCommand.Yes, false);
-            _channel.Send(Serializer.Serialize(new FTPYesNoVersion(1, message)));
-            _channel.SendMark((byte)FTPCommand.EndOfCommand, true);
+            Channel.SendMark((byte)FTPCommand.Yes, false);
+            Channel.Send(Serializer.Serialize(new FTPYesNoVersion(1, message)));
+            Channel.SendMark((byte)FTPCommand.EndOfCommand, true);
         }
 
         private void ShutdownWorker()

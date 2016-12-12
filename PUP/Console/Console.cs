@@ -145,7 +145,8 @@ namespace IFS.IfsConsole
         
         public void Run()
         {
-            while (true)
+            bool exit = false;
+            while (!exit)
             {
                 try
                 {
@@ -154,7 +155,7 @@ namespace IFS.IfsConsole
 
                     if (command != String.Empty)
                     {
-                        ExecuteLine(command);
+                        exit = ExecuteLine(command);
                     }
                 }
                 catch (Exception e)
@@ -164,8 +165,10 @@ namespace IFS.IfsConsole
             }            
         }
 
-        private void ExecuteLine(string line)
-        {            
+        private bool ExecuteLine(string line)
+        {
+            bool exit = false;
+                
             // Comments start with "#"
             if (line.StartsWith("#"))
             {
@@ -180,17 +183,19 @@ namespace IFS.IfsConsole
                 {
                     // Not a command.
                     Console.WriteLine("Invalid command.");
-
                 }
                 else
                 {
-                    InvokeConsoleMethod(methods, args);
+                    exit = InvokeConsoleMethod(methods, args);
                 }
             }
+
+            return exit;
         }
 
-        private void InvokeConsoleMethod(List<MethodInfo> methods, string[] args)
+        private bool InvokeConsoleMethod(List<MethodInfo> methods, string[] args)
         {
+            bool exit = false;
             MethodInfo method = null;
 
             //
@@ -306,8 +311,7 @@ namespace IFS.IfsConsole
             //
             object instance = GetInstanceFromMethod(method);
 
-            method.Invoke(instance, invokeParams);
-
+            return (bool)method.Invoke(instance, invokeParams);        
         }
        
         private object GetInstanceFromMethod(MethodInfo method)

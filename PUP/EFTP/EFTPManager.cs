@@ -19,21 +19,20 @@ namespace IFS.EFTP
     {
         static EFTPManager()
         {
-            //
-            // Initialize the socket ID counter; we start with a
-            // number beyond the range of well-defined sockets.
-            // For each new EFTP channel that gets opened, we will
-            // increment this counter to ensure that each channel gets
-            // a unique ID.  (Well, until we wrap around...)
-            //
-            _nextSocketID = _startingSocketID;
-
             _activeChannels = new Dictionary<uint, EFTPChannel>();
-
         }
+
+        public static void Shutdown()
+        {
+            foreach(EFTPChannel channel in _activeChannels.Values)
+            {
+                channel.Destroy();
+            }
+        }
+
         public static void SendFile(PUPPort destination, Stream data)
         {
-            UInt32 socketID = GetNextSocketID();
+            UInt32 socketID = SocketIDGenerator.GetNextSocketID();
             EFTPChannel newChannel = new EFTPChannel(destination, socketID);
             _activeChannels.Add(socketID, newChannel);
 
@@ -107,6 +106,11 @@ namespace IFS.EFTP
             _activeChannels.Remove(channel.ServerPort.Socket);
         }
 
+        public static IEnumerable<EFTPChannel> EnumerateActiveChannels()
+        {
+            return _activeChannels.Values;
+        }
+
         /// <summary>
         /// Finds the appropriate channel for the given PUP.
         /// </summary>
@@ -125,39 +129,9 @@ namespace IFS.EFTP
         }
 
         /// <summary>
-        /// Generates a unique Socket ID.  We count downward from the max value
-        /// (whereas BSP counts upwards) so as to avoid any duplicates.
-        /// TODO: this could be done much more sanely via a centralized ID factory...
-        /// </summary>
-        /// <returns></returns>
-        private static UInt32 GetNextSocketID()
-        {
-            UInt32 next = _nextSocketID;
-
-            _nextSocketID--;
-
-            //
-            // Handle the wrap around case (which we're very unlikely to
-            // ever hit, but why not do the right thing).
-            // Start over at the initial ID.  This is very unlikely to
-            // collide with any pending channels.
-            //
-            if (_nextSocketID < 0x1000)
-            {
-                _nextSocketID = _startingSocketID;
-            }
-
-            return next;
-        }
-
-
-        /// <summary>
         /// Map from socket address to BSP channel
         /// </summary>
         private static Dictionary<UInt32, EFTPChannel> _activeChannels;
-
-        private static UInt32 _nextSocketID;
-        private static readonly UInt32 _startingSocketID = UInt32.MaxValue;
     }
 
     

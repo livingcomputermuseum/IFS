@@ -235,7 +235,7 @@ namespace IFS.CopyDisk
                 if (!(e is ThreadAbortException))
                 {
                     Logging.Log.Write(LogType.Error, LogComponent.CopyDisk, "CopyDisk worker thread terminated with exception '{0}'.", e.Message);
-                    _channel.SendAbort("Server encountered an error.");
+                    Channel.SendAbort("Server encountered an error.");
 
                     OnExit(this);
                 }
@@ -248,7 +248,7 @@ namespace IFS.CopyDisk
             while (_running)
             {
                 // Retrieve length of this block (in bytes):
-                int length = _channel.ReadUShort() * 2;
+                int length = Channel.ReadUShort() * 2;
 
                 // Sanity check that length is a reasonable value.                
                 if (length > 2048)
@@ -258,11 +258,11 @@ namespace IFS.CopyDisk
                 }
 
                 // Retrieve type            
-                CopyDiskBlock blockType = (CopyDiskBlock)_channel.ReadUShort();
+                CopyDiskBlock blockType = (CopyDiskBlock)Channel.ReadUShort();
 
                 // Read rest of block starting at offset 4 (so deserialization works)              
                 byte[] data = new byte[length];
-                _channel.Read(ref data, data.Length - 4, 4);
+                Channel.Read(ref data, data.Length - 4, 4);
 
                 Log.Write(LogType.Verbose, LogComponent.CopyDisk, "Copydisk block type is {0}", blockType);
 
@@ -276,7 +276,7 @@ namespace IFS.CopyDisk
 
                             // Send the response:
                             VersionYesNoBlock vbOut = new VersionYesNoBlock(CopyDiskBlock.Version, vbIn.Code, "LCM IFS CopyDisk of 26-Jan-2016");
-                            _channel.Send(Serializer.Serialize(vbOut));
+                            Channel.Send(Serializer.Serialize(vbOut));
                         }
                         break;
 
@@ -298,7 +298,7 @@ namespace IFS.CopyDisk
                                 // Send a "Yes" response back.
                                 //
                                 VersionYesNoBlock yes = new VersionYesNoBlock(CopyDiskBlock.Yes, 0, "Come on in, the water's fine.");
-                                _channel.Send(Serializer.Serialize(yes));
+                                Channel.Send(Serializer.Serialize(yes));
                             }
                             else
                             {
@@ -306,7 +306,7 @@ namespace IFS.CopyDisk
                                 // Send a "No" response back indicating the login failure.
                                 //
                                 VersionYesNoBlock no = new VersionYesNoBlock(CopyDiskBlock.No, (ushort)NoCode.IllegalOrIncorrectPassword, "Invalid username or password.");
-                                _channel.Send(Serializer.Serialize(no), true);                                
+                                Channel.Send(Serializer.Serialize(no), true);                                
                             }
                         }
                         break;
@@ -331,7 +331,7 @@ namespace IFS.CopyDisk
                             {
                                 // Invalid name, return No reponse.
                                 VersionYesNoBlock no = new VersionYesNoBlock(CopyDiskBlock.No, (ushort)NoCode.UnitNotReady, "Invalid unit name.");
-                                _channel.Send(Serializer.Serialize(no));
+                                Channel.Send(Serializer.Serialize(no));
                             }
                             else
                             {
@@ -350,14 +350,14 @@ namespace IFS.CopyDisk
                                     // Send a "HereAreDiskParams" response indicating success.
                                     //
                                     HereAreDiskParamsBFSBlock diskParams = new HereAreDiskParamsBFSBlock(_pack.Geometry);
-                                    _channel.Send(Serializer.Serialize(diskParams));
+                                    Channel.Send(Serializer.Serialize(diskParams));
                                 }
                                 catch
                                 {
                                     // If we fail for any reason, return a "No" response.
                                     // TODO: can we be more helpful here?
                                     VersionYesNoBlock no = new VersionYesNoBlock(CopyDiskBlock.No, (ushort)NoCode.UnitNotReady, "Image could not be opened.");
-                                    _channel.Send(Serializer.Serialize(no));
+                                    Channel.Send(Serializer.Serialize(no));
                                 }
                             }
                         }
@@ -380,7 +380,7 @@ namespace IFS.CopyDisk
                             {
                                 // Invalid name, return No reponse.
                                 VersionYesNoBlock no = new VersionYesNoBlock(CopyDiskBlock.No, (ushort)NoCode.UnitNotReady, "Invalid unit name or image already exists.");
-                                _channel.Send(Serializer.Serialize(no));
+                                Channel.Send(Serializer.Serialize(no));
                             }
                             else
                             {
@@ -395,7 +395,7 @@ namespace IFS.CopyDisk
                                 // Send a "HereAreDiskParams" response indicating success.
                                 //
                                 HereAreDiskParamsBFSBlock diskParams = new HereAreDiskParamsBFSBlock(_pack.Geometry);
-                                _channel.Send(Serializer.Serialize(diskParams));
+                                Channel.Send(Serializer.Serialize(diskParams));
                             }
                         }
                         break;
@@ -427,7 +427,7 @@ namespace IFS.CopyDisk
                                 if (_userToken.Privileges != IFSPrivileges.ReadWrite)
                                 {
                                     VersionYesNoBlock no = new VersionYesNoBlock(CopyDiskBlock.No, (ushort)NoCode.UnitWriteProtected, "You do not have permission to store disk images.");
-                                    _channel.Send(Serializer.Serialize(no));
+                                    Channel.Send(Serializer.Serialize(no));
                                     break;
                                 }
                             }
@@ -440,13 +440,13 @@ namespace IFS.CopyDisk
                                 _endAddress > _pack.MaxAddress)
                             {
                                 VersionYesNoBlock no = new VersionYesNoBlock(CopyDiskBlock.No, (ushort)NoCode.UnknownCommand, "Transfer parameters are invalid.");
-                                _channel.Send(Serializer.Serialize(no));
+                                Channel.Send(Serializer.Serialize(no));
                             }
                             else
                             {                                
                                 // We're OK.  Save the parameters and send a Yes response.
                                 VersionYesNoBlock yes = new VersionYesNoBlock(CopyDiskBlock.Yes, 0, "You are cleared for launch.");
-                                _channel.Send(Serializer.Serialize(yes));
+                                Channel.Send(Serializer.Serialize(yes));
 
                                 //
                                 // And send the requested range of pages if this is a Retrieve operation
@@ -458,7 +458,7 @@ namespace IFS.CopyDisk
                                     {
                                         DiabloDiskSector sector = _pack.GetSector(i);
                                         HereIsDiskPageBlock block = new HereIsDiskPageBlock(sector.Header, sector.Label, sector.Data);
-                                        _channel.Send(Serializer.Serialize(block), false /* do not flush */);
+                                        Channel.Send(Serializer.Serialize(block), false /* do not flush */);
 
                                         if ((i % 100) == 0)
                                         {
@@ -468,7 +468,7 @@ namespace IFS.CopyDisk
 
                                     // Send "EndOfTransfer" block to finish the transfer.
                                     EndOfTransferBlock endTransfer = new EndOfTransferBlock(0);
-                                    _channel.Send(Serializer.Serialize(endTransfer));
+                                    Channel.Send(Serializer.Serialize(endTransfer));
 
                                     Log.Write(LogType.Verbose, LogComponent.CopyDisk, "Send done.");
                                 }
@@ -484,7 +484,7 @@ namespace IFS.CopyDisk
                         {
                             if (_currentAddress > _endAddress)
                             {
-                                _channel.SendAbort("Invalid address for page.");
+                                Channel.SendAbort("Invalid address for page.");
                                 _running = false;
                                 break;
                             }
@@ -552,7 +552,7 @@ namespace IFS.CopyDisk
                             Log.Write(LogType.Verbose, LogComponent.CopyDisk, "Sending error summary...");
                             // No data in block.  Send list of errors we encountered.  (There should always be none since we're perfect and have no disk errors.)
                             HereAreErrorsBFSBlock errorBlock = new HereAreErrorsBFSBlock(0, 0);
-                            _channel.Send(Serializer.Serialize(errorBlock));
+                            Channel.Send(Serializer.Serialize(errorBlock));
                         }
                         break;
 

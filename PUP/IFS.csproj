@@ -117,11 +117,13 @@
     <Compile Include="Entrypoint.cs" />
     <Compile Include="FTP\FTPServer.cs" />
     <Compile Include="FTP\PropertyList.cs" />
+    <Compile Include="Gateway\Router.cs" />
     <Compile Include="Logging\Log.cs" />
-    <Compile Include="GatewayInformationProtocol.cs" />
+    <Compile Include="Gateway\GatewayInformationProtocol.cs" />
     <Compile Include="Mail\MailManager.cs" />
     <Compile Include="MiscServicesProtocol.cs" />
     <Compile Include="Serializer.cs" />
+    <Compile Include="SocketIDGenerator.cs" />
     <Compile Include="Transport\Ethernet.cs" />
     <Compile Include="PUPProtocolBase.cs" />
     <Compile Include="PUP.cs" />

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using IFS.Gateway;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -50,7 +51,7 @@ namespace IFS
                 }
 
                 PUP echoPup = new PUP(PupType.ImAnEcho, p.ID, p.SourcePort, localPort, contents, garbageByte);
-                PUPProtocolDispatcher.Instance.SendPup(echoPup);
+                Router.Instance.SendPup(echoPup);
             }
         }
 

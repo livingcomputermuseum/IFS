@@ -1,4 +1,5 @@
-﻿using IFS.Logging;
+﻿using IFS.Gateway;
+using IFS.Logging;
 
 using System;
 using System.Collections.Generic;
@@ -22,6 +23,11 @@ namespace IFS
             _bolThread.Start();
         }
 
+        public void Shutdown()
+        {
+            _bolThread.Abort();
+        }
+
         private void BreathOfLifeThread()
         {
             while (true)
@@ -29,7 +35,7 @@ namespace IFS
                 //
                 // Send BOL
                 //            
-                PUPProtocolDispatcher.Instance.Send(_bolPacket, DirectoryServices.Instance.LocalHost, _bolAddress, _bolPacketType);
+                Router.Instance.Send(_bolPacket, DirectoryServices.Instance.LocalHost, _bolAddress, _bolPacketType);
 
                 Log.Write(LogType.Verbose, LogComponent.BreathOfLife, "Breath Of Life packet sent.");
 
@@ -54,7 +60,7 @@ namespace IFS
 
         /// <summary>
         /// The gold-standard BOL packet, containing the Alto ethernet bootstrap code. 
-        /// Note that this does not contain padding for the ethernet header, the dispatcher adds those two words.       
+        /// Note that this does not contain padding for the ethernet header, the router adds those two words.       
         /// </summary>
         private byte[] _bolPacket = 
         {

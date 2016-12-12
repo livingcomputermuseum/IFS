@@ -1,4 +1,5 @@
-﻿using IFS.Logging;
+﻿using IFS.Gateway;
+using IFS.Logging;
 
 using System;
 using System.Collections.Generic;
@@ -30,6 +31,11 @@ namespace IFS.EFTP
         public PUPPort ServerPort
         {
             get { return _serverConnectionPort; }
+        }
+
+        public PUPPort ClientPort
+        {
+            get { return _clientConnectionPort; }
         }
 
         public delegate void DestroyDelegate();
@@ -81,7 +87,7 @@ namespace IFS.EFTP
                         // Send the data.                        
                         PUP dataPup = new PUP(PupType.EFTPData, _sendPos, _clientConnectionPort, _serverConnectionPort, chunk);
                         
-                        PUPProtocolDispatcher.Instance.SendPup(dataPup);
+                        Router.Instance.SendPup(dataPup);
 
                         // Await an ACK.  We will retry several times and resend as necessary.
                         int retry = 0;
@@ -95,7 +101,7 @@ namespace IFS.EFTP
                             else
                             {
                                 // timeout: resend the PUP and wait for an ACK again.
-                                PUPProtocolDispatcher.Instance.SendPup(dataPup);
+                                Router.Instance.SendPup(dataPup);
                             }
                         }
 
@@ -135,7 +141,7 @@ namespace IFS.EFTP
         public void SendEnd()
         {
             PUP endPup = new PUP(PupType.EFTPEnd, _sendPos, _clientConnectionPort, _serverConnectionPort, new byte[0]);
-            PUPProtocolDispatcher.Instance.SendPup(endPup);            
+            Router.Instance.SendPup(endPup);            
 
             // Await an ack
             _outputAckEvent.WaitOne(EFTPAckTimeoutPeriod);
@@ -144,7 +150,7 @@ namespace IFS.EFTP
 
             // Send another end to close things off.
             endPup = new PUP(PupType.EFTPEnd, _sendPos, _clientConnectionPort, _serverConnectionPort, new byte[0]);
-            PUPProtocolDispatcher.Instance.SendPup(endPup);
+            Router.Instance.SendPup(endPup);
         }
 
         public void RecvData(PUP p)
@@ -186,7 +192,7 @@ namespace IFS.EFTP
             // Send this directly, do not wait for the client to be ready (since it may be wedged, and we don't expect anyone to actually notice
             // this anyway).
             //
-            PUPProtocolDispatcher.Instance.SendPup(abortPup);
+            Router.Instance.SendPup(abortPup);
             */
         }
 

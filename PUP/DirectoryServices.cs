@@ -34,8 +34,7 @@ namespace IFS
     {
         private DirectoryServices()
         {
-            // Get our host address; for now just hardcode it.
-            // TODO: need to define config files, etc.
+            // Get our host address from the configuration database.       
             _localHost = new HostAddress((byte)Configuration.ServerNetwork, (byte)Configuration.ServerHost);            
 
             // Load in hosts table from hosts file.
