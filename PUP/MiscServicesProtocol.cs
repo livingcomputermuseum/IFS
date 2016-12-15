@@ -1,4 +1,21 @@
-﻿using IFS.Boot;
+﻿/*  
+    This file is part of IFS.
+
+    IFS is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    IFS is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with IFS.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+using IFS.Boot;
 using IFS.EFTP;
 using IFS.Gateway;
 using IFS.Logging;
@@ -229,8 +246,9 @@ namespace IFS
 
             //
             // For now, the assumption is that each name maps to at most one address.
-            //
+            //            
             string lookupName = Helpers.ArrayToString(p.Contents);
+            Log.Write(LogType.Verbose, LogComponent.MiscServices, "Name lookup is for '{0}'", lookupName);
 
             HostAddress address = DirectoryServices.Instance.NameLookup(lookupName);
 
@@ -242,6 +260,8 @@ namespace IFS
                 PUP lookupReply = new PUP(PupType.NameLookupResponse, p.ID, p.SourcePort, localPort, lookupPort.ToArray());
 
                 Router.Instance.SendPup(lookupReply);
+
+                Log.Write(LogType.Verbose, LogComponent.MiscServices, "Address is '{0}'", address);
             }
             else
             {
@@ -251,6 +271,8 @@ namespace IFS
                 PUP errorReply = new PUP(PupType.DirectoryLookupErrorReply, p.ID, p.SourcePort, localPort, Helpers.StringToArray(errorString));
 
                 Router.Instance.SendPup(errorReply);
+
+                Log.Write(LogType.Verbose, LogComponent.MiscServices, "Host is unknown.");
             }
         }
 

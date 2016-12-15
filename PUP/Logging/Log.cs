@@ -1,4 +1,21 @@
-﻿#define LOGGING_ENABLED
+﻿/*  
+    This file is part of IFS.
+
+    IFS is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    IFS is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with IFS.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#define LOGGING_ENABLED
 
 using System;
 using System.IO;
@@ -81,8 +98,7 @@ namespace IFS.Logging
                 (_components & component) != 0)
             {
                 //
-                // My log has something to tell you...
-                // TODO: color based on type, etc.
+                // My log has something to tell you...                
                 Console.WriteLine(component.ToString() + ": " + message, args);
 
                 if (_logStream != null)

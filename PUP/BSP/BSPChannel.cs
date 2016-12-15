@@ -1,4 +1,21 @@
-﻿using IFS.Gateway;
+﻿/*  
+    This file is part of IFS.
+
+    IFS is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    IFS is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with IFS.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+using IFS.Gateway;
 using IFS.Logging;
 
 using System;
@@ -168,8 +185,8 @@ namespace IFS.BSP
                 {
                     _inputLock.EnterWriteLock();
 
-                    // We have some data right now, read it in.
-                    // TODO: this code is ugly and it wants to die.
+                    // We have some data right now, read it in, one
+                    // byte at a time...                                        
                     while (_inputQueue.Count > 0 && read < count)
                     {
                         ushort word = _inputQueue.Dequeue();
@@ -224,8 +241,7 @@ namespace IFS.BSP
         /// </summary>
         /// <returns></returns>
         public byte ReadByte()
-        {
-            // TODO: optimize this
+        {            
             byte[] data = new byte[1];
 
             Read(ref data, 1);
@@ -238,8 +254,7 @@ namespace IFS.BSP
         /// </summary>
         /// <returns></returns>
         public ushort ReadUShort()
-        {
-            // TODO: optimize this
+        {            
             byte[] data = new byte[2];
 
             Read(ref data, 2);

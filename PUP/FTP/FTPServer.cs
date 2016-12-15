@@ -1,4 +1,21 @@
-﻿using IFS.BSP;
+﻿/*  
+    This file is part of IFS.
+
+    IFS is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    IFS is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with IFS.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+using IFS.BSP;
 using IFS.Logging;
 
 using System;
@@ -160,7 +177,7 @@ namespace IFS.FTP
 
                             //
                             // Return our Version.
-                            FTPYesNoVersion serverVersion = new FTPYesNoVersion(1, "LCM IFS FTP of 4 Feb 2016.");
+                            FTPYesNoVersion serverVersion = new FTPYesNoVersion(1, "LCM+L IFS FTP of 4 Feb 2016.");
                             SendFTPResponse(FTPCommand.Version, serverVersion);                            
                         }
                         break;
@@ -563,9 +580,10 @@ namespace IFS.FTP
                 Log.Write(LogType.Verbose, LogComponent.FTP, "Receiving file {0}.", fullFileName);
                 using (FileStream inFile = new FileStream(fullFileName, FileMode.Create, FileAccess.Write))
                 {
-                    // TODO: move to constant. Possibly make max size configurable.
-                    // For now, it seems very unlikely that any Alto is going to have a single file larger than 4mb.
-                    lastMark = ReadUntilNextMark(out buffer, 4096 * 1024);   
+                    // 
+                    // For now, it seems very unlikely that any Alto is going to have a single file larger than 4mb, so
+                    // reading the entire file into memory is somewhat reasonable...
+                    lastMark = ReadUntilNextMark(out buffer, _maxFileSize);   
 
                     // Write out to file
                     inFile.Write(buffer, 0, buffer.Length);
@@ -577,7 +595,7 @@ namespace IFS.FTP
             {
                 // We failed while writing the file, send a No response to the client.
                 // Per the spec, we need to drain the client data first.
-                lastMark = ReadUntilNextMark(out buffer, 4096 * 1024);   // TODO: move to constant
+                lastMark = ReadUntilNextMark(out buffer, _maxFileSize);
                 success = false;
 
                 Log.Write(LogType.Warning, LogComponent.FTP, "Failed to write {0}.  Error '{1}'", fullFileName, e.Message);
@@ -596,8 +614,7 @@ namespace IFS.FTP
             Log.Write(LogType.Verbose, LogComponent.FTP, "Client success code is {0}, {1}, '{2}'", lastMark, clientYesNo.Code, clientYesNo.Code);
 
             if (!success)
-            {
-                // TODO: provide actual No codes.
+            {                
                 SendFTPNoResponse(NoCode.FileBusy, "File transfer failed.");
             }
             else
@@ -643,7 +660,7 @@ namespace IFS.FTP
 
             //
             // Check the privileges of the user.  If the user has write permissions
-            // then we are OK to delete.  Otherwise, we must be deleteing files in the user's directory.
+            // then we are OK to delete.  Otherwise, we must be deleting files in the user's directory.
             //
             string fullFileName = Path.Combine(Configuration.FTPRoot, fullPath);
             if (userToken.Privileges != IFSPrivileges.ReadWrite &&
@@ -688,8 +705,7 @@ namespace IFS.FTP
                     Channel.Send(Serializer.Serialize(new FTPYesNoVersion(0, "File deleted successfully.")));
                 }
                 catch(Exception e)
-                {
-                    // TODO: calculate real NO codes
+                {                    
                     Channel.SendMark((byte)FTPCommand.No, false);
                     Channel.Send(Serializer.Serialize(new FTPYesNoVersion((byte)NoCode.AccessDenied, e.Message)));
                 }               
@@ -886,10 +902,9 @@ namespace IFS.FTP
             try
             {
                 Log.Write(LogType.Verbose, LogComponent.Mail, "Receiving mail file to memory...");
-                
-                // TODO: move to constant. Possibly make max size configurable.
+                                
                 // For now, it seems very unlikely that any Alto is going to have a single file larger than 4mb.
-                lastMark = ReadUntilNextMark(out buffer, 4096 * 1024);
+                lastMark = ReadUntilNextMark(out buffer, _maxFileSize);
 
                 Log.Write(LogType.Verbose, LogComponent.Mail, "Received {0} bytes.", buffer.Length);                
 
@@ -908,7 +923,7 @@ namespace IFS.FTP
             {
                 // We failed while writing the mail file, send a No response to the client.
                 // Per the spec, we need to drain the client data first.
-                lastMark = ReadUntilNextMark(out buffer, 4096 * 1024);   // TODO: move to constant
+                lastMark = ReadUntilNextMark(out buffer, _maxFileSize);
                 success = false;
 
                 Log.Write(LogType.Warning, LogComponent.Mail, "Failed to write mail file.  Error '{1}'.  Aborting.", e.Message);
@@ -927,8 +942,7 @@ namespace IFS.FTP
             Log.Write(LogType.Verbose, LogComponent.Mail, "Client success code is {0}, {1}, '{2}'", lastMark, clientYesNo.Code, clientYesNo.Code);
 
             if (!success)
-            {
-                // TODO: provide actual No codes.
+            {                
                 SendFTPNoResponse(NoCode.TransientServerFailure, "Mail transfer failed.");
             }
             else
@@ -1237,6 +1251,9 @@ namespace IFS.FTP
 
         private Thread _workerThread;
         private bool _running;
+
+        // 4 megabytes as the maximum file size to accept.
+        private const int _maxFileSize = 4096 * 1024;
 
         /// <summary>
         /// The last set of mail files retrieved via a Retrieve-Mail operation.

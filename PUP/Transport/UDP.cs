@@ -1,4 +1,21 @@
-﻿using System;
+﻿/*  
+    This file is part of IFS.
+
+    IFS is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    IFS is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with IFS.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+using System;
 using System.Net;
 using System.Net.Sockets;
 
@@ -25,7 +42,8 @@ namespace IFS.Transport
     /// Any of these virtual or real Altos can, at any time, be running in Promiscuous mode, can send
     /// arbitrary packets with any source or destination address in the header, or send broadcasts.  
     /// This makes address translation from the virtual (3M) side to the physical (UDP, 100M) side and 
-    /// back again tricky.
+    /// back again tricky.  It also makes it tricky to ensure an outgoing packet makes it to any and 
+    /// all parties that may be interested (consider the Promiscuous Alto case.)
     /// 
     /// If each participant on the virtual network were to have a table mapping physical (UDP IP, 100M MAC) to
     /// virtual (3M MAC) addresses then broadcasts could be avoided, but it complicates the logic in all
@@ -51,7 +69,7 @@ namespace IFS.Transport
             // Try to set up UDP client.
             try
             {
-                _udpClient = new UdpClient(_udpPort, AddressFamily.InterNetwork);                                                           
+                _udpClient = new UdpClient(Configuration.UDPPort, AddressFamily.InterNetwork);                                                           
                 _udpClient.Client.Blocking = true;                
                 _udpClient.EnableBroadcast = true;
                 _udpClient.MulticastLoopback = false;
@@ -69,7 +87,7 @@ namespace IFS.Transport
                     if (unicast.Address.AddressFamily == AddressFamily.InterNetwork)
                     {
                         _thisIPAddress = unicast.Address;
-                        _broadcastEndpoint = new IPEndPoint(GetBroadcastAddress(_thisIPAddress, unicast.IPv4Mask), _udpPort);
+                        _broadcastEndpoint = new IPEndPoint(GetBroadcastAddress(_thisIPAddress, unicast.IPv4Mask), Configuration.UDPPort);
                         break;
                     }
                 }
@@ -84,7 +102,7 @@ namespace IFS.Transport
             {
                 Log.Write(LogType.Error, LogComponent.UDP,
                     "Error configuring UDP socket {0} for use with IFS on interface {1}.  Ensure that the selected network interface is valid, configured properly, and that nothing else is using this port.",
-                    _udpPort,
+                    Configuration.UDPPort,
                     iface.Name);
 
                 Log.Write(LogType.Error, LogComponent.UDP,
@@ -143,8 +161,7 @@ namespace IFS.Transport
             // Actual data
             p.RawData.CopyTo(encapsulatedFrame, 6);            
 
-            // Send as UDP broadcast.
-            // TODO: this could be done without broadcasts if we kept a table mapping IPs to 3mbit MACs.
+            // Send as UDP broadcast.            
             _udpClient.Send(encapsulatedFrame, encapsulatedFrame.Length, _broadcastEndpoint);               
         }
 
@@ -176,8 +193,7 @@ namespace IFS.Transport
             // Actual data
             data.CopyTo(encapsulatedFrame, 6);            
 
-            // Send as UDP broadcast.
-            // TODO: this could be done without broadcasts if we kept a table mapping IPs to 3mbit MACs.
+            // Send as UDP broadcast.            
             _udpClient.Send(encapsulatedFrame, encapsulatedFrame.Length, _broadcastEndpoint);                        
         }
 
@@ -237,7 +253,7 @@ namespace IFS.Transport
             // properly.)
             Log.Write(LogComponent.UDP, "UDP Receiver thread started.");
 
-            IPEndPoint groupEndPoint = new IPEndPoint(IPAddress.Any, _udpPort);            
+            IPEndPoint groupEndPoint = new IPEndPoint(IPAddress.Any, Configuration.UDPPort);            
 
             while (true)
             {
@@ -273,9 +289,7 @@ namespace IFS.Transport
 
         // Thread used for receive
         private Thread _receiveThread;
-
-        // UDP port (TODO: make configurable?)
-        private const int _udpPort = 42424;
+        
         private UdpClient _udpClient;
         private IPEndPoint _broadcastEndpoint;
 

@@ -1,4 +1,21 @@
-﻿using IFS.BSP;
+﻿/*  
+    This file is part of IFS.
+
+    IFS is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    IFS is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with IFS.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+using IFS.BSP;
 using IFS.Logging;
 
 using System;
@@ -253,7 +270,7 @@ namespace IFS.CopyDisk
                 // Sanity check that length is a reasonable value.                
                 if (length > 2048)
                 {
-                    // TODO: shut down channel
+                    Channel.SendAbort("Block length is invalid.");
                     throw new InvalidOperationException(String.Format("Insane block length ({0})", length));
                 }
 
@@ -275,7 +292,7 @@ namespace IFS.CopyDisk
                             Log.Write(LogType.Verbose, LogComponent.CopyDisk, "Copydisk client is version {0}, '{1}'", vbIn.Code, vbIn.Herald.ToString());
 
                             // Send the response:
-                            VersionYesNoBlock vbOut = new VersionYesNoBlock(CopyDiskBlock.Version, vbIn.Code, "LCM IFS CopyDisk of 26-Jan-2016");
+                            VersionYesNoBlock vbOut = new VersionYesNoBlock(CopyDiskBlock.Version, vbIn.Code, "LCM+L IFS CopyDisk of 26-Jan-2016");
                             Channel.Send(Serializer.Serialize(vbOut));
                         }
                         break;

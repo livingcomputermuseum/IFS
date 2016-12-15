@@ -1,4 +1,21 @@
-﻿using IFS.BSP;
+﻿/*  
+    This file is part of IFS.
+
+    IFS is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    IFS is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with IFS.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+using IFS.BSP;
 using IFS.EFTP;
 using IFS.Logging;
 
@@ -80,7 +97,7 @@ namespace IFS
             else
             {
                 // Not a protocol we handle; log it.
-                Log.Write(LogType.Normal, LogComponent.PUP, "Unhandled PUP protocol, source socket {0}, destination socket {1}, type {2}, dropped packet.", pup.SourcePort.Socket, pup.DestinationPort.Socket, pup.Type);
+                Log.Write(LogType.Normal, LogComponent.PUP, "Unhandled PUP protocol, source  {0}, destination  {1}, type {2}, dropped packet.", pup.SourcePort, pup.DestinationPort, pup.Type);
             }            
         }
 
@@ -107,12 +124,12 @@ namespace IFS
             // Connectionless
             RegisterProtocol(new PUPProtocolEntry("Gateway Information", 2, ConnectionType.Connectionless, new GatewayInformationProtocol()));
             RegisterProtocol(new PUPProtocolEntry("Misc Services", 0x4, ConnectionType.Connectionless, new MiscServicesProtocol()));
-            RegisterProtocol(new PUPProtocolEntry("Echo", 0x5, ConnectionType.Connectionless, new EchoProtocol()));
+            RegisterProtocol(new PUPProtocolEntry("Echo", 0x5, ConnectionType.Connectionless, new EchoProtocol()));            
 
             // RTP/BSP based:            
             RegisterProtocol(new PUPProtocolEntry("CopyDisk", 0x15  /* 25B */, ConnectionType.BSP, typeof(CopyDiskWorker)));
             RegisterProtocol(new PUPProtocolEntry("FTP", 0x3, ConnectionType.BSP, typeof(FTPWorker)));
-            RegisterProtocol(new PUPProtocolEntry("Mail", 0x7, ConnectionType.BSP, typeof(FTPWorker)));
+            RegisterProtocol(new PUPProtocolEntry("Mail", 0x7, ConnectionType.BSP, typeof(FTPWorker)));            
 
             // Breath Of Life
             _breathOfLifeServer = new BreathOfLife();

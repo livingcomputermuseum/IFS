@@ -1,4 +1,21 @@
-﻿using IFS.Boot;
+﻿/*  
+    This file is part of IFS.
+
+    IFS is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    IFS is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with IFS.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+using IFS.Boot;
 using IFS.CopyDisk;
 using IFS.FTP;
 using IFS.Gateway;
@@ -34,7 +51,10 @@ namespace IFS
 
         private static void PrintHerald()
         {
-            Console.WriteLine("LCM IFS v0.1, 4/19/2016.");
+            Console.WriteLine("LCM+L IFS v0.1, 12/14/2016.");
+            Console.WriteLine("(c) 2015, 2016 Living Computers: Museum+Labs.");
+            Console.WriteLine("Bug reports to joshd@livingcomputers.org");
+            Console.WriteLine();
             Console.WriteLine();
         }        
 
@@ -74,12 +94,17 @@ namespace IFS
                         }                        
                     }
                     break;
+
+                default:
+                    throw new InvalidConfigurationException(
+                        String.Format("The specified interface type ({0}) is invalid.", Configuration.InterfaceType));
             }
 
             // Not found.
             if (!bFound)
             {
-                throw new InvalidConfigurationException("The specified network interface is invalid.");
+                throw new InvalidConfigurationException(
+                    String.Format("The specified network interface ({0}) is invalid or unusable by IFS.", Configuration.InterfaceName));
             }
         }
 

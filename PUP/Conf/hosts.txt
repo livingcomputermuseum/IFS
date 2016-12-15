@@ -14,10 +14,5 @@
 1#                ifs
 42#               Muffin
 43#               Pumpkin
-
-43#               Duplicate
-45#               Pumpkin
-
-# to test
-5#177#            NotHere
-
+44#               Frunobulax
+45#               Phydeaux
