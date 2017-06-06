@@ -164,7 +164,10 @@ namespace IFS
 
         public override string ToString()
         {
-            return String.Format("Net {0} Host {1} Socket {2}", Network, Host, Socket);
+            return String.Format("Net {0} Host {1} Socket {2}", 
+                Helpers.ToOctal(Network), 
+                Helpers.ToOctal(Host), 
+                Helpers.ToOctal((int)Socket));
         }
 
         public byte Network;
@@ -188,7 +191,7 @@ namespace IFS
         /// TODO: Update to use Serialization code rather than packing bytes by hand.
         /// </param>
         /// 
-        public PUP(PupType type, UInt32 id, PUPPort destination, PUPPort source, byte[] contents, bool contentsContainsGarbageByte)
+        public PUP(PupType type, byte transportControl, UInt32 id, PUPPort destination, PUPPort source, byte[] contents, bool contentsContainsGarbageByte)
         {
             _rawData = null;
 
@@ -208,7 +211,7 @@ namespace IFS
                 throw new InvalidOperationException("Odd content length with garbage byte specified.");
             }
 
-            TransportControl = 0;
+            TransportControl = transportControl;
             Type = type;
             ID = id;
             DestinationPort = destination;
@@ -244,6 +247,21 @@ namespace IFS
             // Calculate the checksum and stow it
             Checksum = CalculateChecksum();
             Helpers.WriteUShort(ref _rawData, Checksum, _rawData.Length - 2);
+        }
+
+        /// <summary>
+        /// Constructor that assumes a transport control of 0
+        /// </summary>
+        /// <param name="type"></param>
+        /// <param name="id"></param>
+        /// <param name="destination"></param>
+        /// <param name="source"></param>
+        /// <param name="contents"></param>
+        /// <param name="contentsContainsGarbageByte"></param>
+        public PUP(PupType type, UInt32 id, PUPPort destination, PUPPort source, byte[] contents, bool contentsContainsGarbageByte) : 
+            this(type, 0, id, destination, source, contents, contentsContainsGarbageByte)
+        {
+
         }
 
         /// <summary>
@@ -359,16 +377,16 @@ namespace IFS
 
 
             return (ushort)sum;
-        }        
+        }
 
         public readonly ushort Length;
         public readonly byte TransportControl;
         public readonly PupType Type;
         public readonly UInt32 ID;
         public readonly PUPPort DestinationPort;
-        public readonly PUPPort SourcePort;            
+        public readonly PUPPort SourcePort;
         public readonly byte[] Contents;
-        public readonly ushort Checksum;        
+        public readonly ushort Checksum;
 
         private byte[] _rawData;
 
@@ -474,6 +492,11 @@ namespace IFS
             }
 
             return sb.ToString();
+        }
+
+        public static string ToOctal(int i)
+        {
+            return Convert.ToString(i, 8);
         }
     }
 }

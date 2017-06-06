@@ -11,8 +11,11 @@
 #  all numbers are in octal.
 #
 
-1#                ifs
-42#               Muffin
-43#               Pumpkin
-44#               Frunobulax
-45#               Phydeaux
+# Local Network
+1#1#              lcm
+1#100#            Thacker
+1#42#             Kay
+1#43#             Boggs
+1#44#             Kaehler
+1#45#             Lampson
+

@@ -69,15 +69,15 @@ namespace IFS.Transport
             // Try to set up UDP client.
             try
             {
-                _udpClient = new UdpClient(Configuration.UDPPort, AddressFamily.InterNetwork);                                                           
-                _udpClient.Client.Blocking = true;                
+                _udpClient = new UdpClient(Configuration.UDPPort, AddressFamily.InterNetwork);
+                _udpClient.Client.Blocking = true;
                 _udpClient.EnableBroadcast = true;
                 _udpClient.MulticastLoopback = false;
 
                 //
                 // Grab the broadcast address for the interface so that we know what broadcast address to use
                 // for our UDP datagrams.
-                //                
+                //
                 IPInterfaceProperties props = iface.GetIPProperties();                
 
                 foreach (UnicastIPAddressInformation unicast in props.UnicastAddresses)
@@ -214,12 +214,17 @@ namespace IFS.Transport
             // Read the type and switch on it
             int etherType3mbit = ((packetStream.ReadByte() << 8) | (packetStream.ReadByte()));
 
-            if (etherType3mbit == _pupFrameType)
+            //
+            // Ensure this is a packet we're interested in.
+            //
+            if (etherType3mbit == _pupFrameType &&                              // it's a PUP
+                    (destination == DirectoryServices.Instance.LocalHost ||     // for us, or...
+                     destination == 0))                                         // broadcast
             {
                 try
                 {
                     PUP pup = new PUP(packetStream, length);
-                    _routerCallback(pup);
+                    _routerCallback(pup, destination != 0);
                 }
                 catch(Exception e)
                 {

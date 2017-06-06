@@ -1,4 +1,4 @@
-﻿Readme.txt for IFS v1.1:
+﻿Readme.txt for IFS v1.2:
 
 1. Introduction and Overview
 ============================
@@ -16,21 +16,23 @@ emulator over either Raw Ethernet packets or UDP broadcasts.
 
 It provides the following IFS services:
 
-  - BreathOfLife:	Provides the "Breath Of Life" packet needed to bootstrap
-					an Alto over the network.
-  - EFTP/Boot:		Provides boot files over the network.
-  - FTP:			File Transfer Protocol.
-  - CopyDisk:		Allows imaging and restoring of Alto disk packs over the 
-					network.
+  - BreathOfLife:   Provides the "Breath Of Life" packet needed to bootstrap
+                    an Alto over the network.
+  - EFTP/Boot:      Provides boot files over the network.
+  - FTP:            File Transfer Protocol.
+  - CopyDisk:       Allows imaging and restoring of Alto disk packs over the 
+                    network.
   - Misc. Services: Provides network name lookup, time and other miscellaneous
                     services.
-  - Mail:			Delivers mail to other users.
+  - Gateway:        Routes PUPs to other sites on the Internet
+  - Mail:           Delivers mail to other users.  (Currently only on the same
+                    network, mail is not routed.)
 
 
 The following services are not yet provided, but are planned:
 
-  - EFTP/Printing:	Provides print services to networked Altos
-  - Gateway:		Routes PUPs to other Alto networks across the Internet
+  - EFTP/Printing:  Provides print services to networked Altos
+  - Mail routing:   Sending mail to other sites over the Internet.
 
 If you have questions, or run into issues or have feature requests, please
 feel free to e-mail me at joshd@livingcomputers.org.
@@ -62,10 +64,10 @@ in mind.  All files (even those in user directories) are globally readable.
 IFS uses a set of files in the "Conf" subdirectory to configure the server.
 These include:
 
-	- accounts.txt:			Defines the set of user accounts
-	- bootdirectory.txt:	Maps boot numbers to boot files for network boot
-	- hosts.txt:			Maps Inter-network numbers to names
-	- ifs.cfg:				General configuration for the IFS server
+    - accounts.txt:         Defines the set of user accounts
+    - bootdirectory.txt:    Maps boot numbers to boot files for network boot
+    - hosts.txt:            Maps Inter-network numbers to names
+    - ifs.cfg:              General configuration for the IFS server
 
 2.1 ifs.cfg:
 ------------
@@ -74,33 +76,33 @@ ifs.cfg contains general configuration details for the server.  It specifies
 configuration for the network transport, directory paths and debugging options.
 
 Directory configuration:
-	- FTPRoot:		Specifies the path for the root of the FTP directory tree.
-	- CopyDiskRoot:	Specifies the path for the directory to store CopyDisk 
-					images.
-	- BootRoot:		Specifies the path for boot images.
-	- MailRoot:		Specifies the path for the root of the Mail directory tree.
-					(User mail folders are placed in this directory.)
+    - FTPRoot:      Specifies the path for the root of the FTP directory tree.
+    - CopyDiskRoot:	Specifies the path for the directory to store CopyDisk 
+                    images.
+    - BootRoot:     Specifies the path for boot images.
+    - MailRoot:     Specifies the path for the root of the Mail directory tree.
+                    (User mail folders are placed in this directory.)
 
 Interface configuration:
-	- InterfaceType:	"RAW" or "UDP".  Specifies the transport to use for
-						communication.
-	- InterfaceName:	The name of the host network adapter to use for 
-						communication.
+    - InterfaceType:    "RAW" or "UDP".  Specifies the transport to use for
+                        communication.
+    - InterfaceName:    The name of the host network adapter to use for 
+                        communication.
 
-	- UDPPort:			The port number (decimal) to use for the UDP transport.
+    - UDPPort:          The port number (decimal) to use for the UDP transport.
 
 Network configuration:
-	- ServerNetwork:	The IFS server's network number.
-	- ServerHost:		The IFS server's host number.
+    - ServerNetwork:    The IFS server's network number.
+    - ServerHost:       The IFS server's host number.
 
 Debugging configuration:
-	- LogTypes:			The level of verbosity for logging.  One of:
-						None, Normal, Warning, Error, Verbose, or All
+    - LogTypes:         The level of verbosity for logging.  One of:
+                        None, Normal, Warning, Error, Verbose, or All
 
-	- LogComponent:		The components to log details about.  One of:
-						None, Ethernet, RTP, BSP, MiscServices, CopyDisk,
-						DirectoryServices, PUP, FTP, BreathOfLife, EFTP,
-						BootServer, UDP, Mail, Configuration, or All
+    - LogComponent:     The components to log details about.  One of:
+                        None, Ethernet, RTP, BSP, MiscServices, CopyDisk,
+                        DirectoryServices, PUP, FTP, BreathOfLife, EFTP,
+                        BootServer, UDP, Mail, Configuration, or All
 
 2.2 hosts.txt:
 --------------
@@ -124,18 +126,44 @@ A Hostname is an alphanumeric sequence that must begin with a letter.
 A hosts.txt entry for our Alto on network 5 with host number 72 providing said
 system with name "alan" would thus look like:
 
-5#72#		alan
+5#72#       alan
 
 Or optionally, if our IFS server is on network 5:
 
-72#			alan
+72#         alan
 
 It is a good idea to provide an entry for the IFS server itself so that the 
 server can easily be reached by name.  By default (unless ifs.cfg has been 
 changed), the IFS server's inter-network name is 1#1# (network 1, host 1).
 
 
-2.3 bootdirectory.txt
+2.3 networks.txt
+----------------
+ 
+networks.txt identifies known networks and provides the address and port for 
+their IFS gateway servers.  See Section 5 for more details on gateways.
+This file is processed when IFS starts.
+
+Each line in this file is of the format
+ <inter-network number>  <IFS host IP or hostname>[:port]
+
+For example:
+   5#    192.168.1.137
+would define network 5's gateway as 192.168.1.137 with the default port.
+
+   12#   myhostname.net:6666
+defines network 12's gateway at myhostname.net, port 6666.
+
+If no port number is specified for a given network entry, the entry will
+default to 42425.
+
+networks.txt must contain an entry for the local IFS server itself if you
+want to enable routing through the gateway.  In order for the IFS gateway 
+to be able to talk to the outside world, the port specified for the local
+IFS server must be opened.  (You may need to enable port forwarding if you
+are going to be routing PUPs over the Internet, for example.)
+
+2.4 bootdirectory.txt
 ---------------------
 
 bootdirectory.txt maps boot numbers to the bootfile they correspond to.  The
@@ -156,7 +184,7 @@ Note that the IFS server does not include the actual boot files -- see Section
 6.0 for details on where to find these files to populate your BootRoot 
 directory.
 
-2.4 accounts.txt
+2.5 accounts.txt
 ----------------
 
 accounts.txt defines user accounts for the IFS system.  
@@ -178,18 +206,18 @@ console to add, remove, or change user accounts.
 Each user definition is a line in the format:
 <username>:<password hash>:<privileges>:<full user name>:<home directory>
 
-	- username:			an alphanumeric sequence starting with a letter.  This
-						define's the user's login name.
-	- password hash:	an encoded version of the user's password.  This can be
-						edited, but is generally not advisable.  See Section
-						3.0 for details on setting and changing user passwords.
-	- privileges:		Either Admin (administrative privileges) or User (normal
-						user privileges).  See section 4.0 for details.
-	- full user name:	Self explanatory; the full name (i.e. Alan Kay) of the
-						user.
-	- home directory:	The user's directory (which is placed under the FTPRoot
-						directory).   See Section 4.0 for details on user 
-						directories.
+    - username:         an alphanumeric sequence starting with a letter.  This
+                        define's the user's login name.
+    - password hash:    an encoded version of the user's password.  This can be
+                        edited, but is generally not advisable.  See Section
+                        3.0 for details on setting and changing user passwords.
+    - privileges:       Either Admin (administrative privileges) or User (normal
+                        user privileges).  See section 4.0 for details.
+    - full user name:   Self explanatory; the full name (i.e. Alan Kay) of the
+                        user.
+    - home directory:   The user's directory (which is placed under the FTPRoot
+                        directory).   See Section 4.0 for details on user 
+                        directories.
 
 Changes made to this file while IFS is running will not take effect until IFS
 is restarted.  (This is another reason to use the Console to make changes --
@@ -210,24 +238,23 @@ synopses and descriptions.
 
 Here is a rundown of the basic command set:
 
-	show users - Displays the current user database (See Section 4.0)
+    show users - Displays the current user database (See Section 4.0)
 
-	show user <username> - Displays information for the specified user
-						   (See Section 4.0)
+    show user <username> - Displays information for the specified user
+                           (See Section 4.0)
+    set password <username> - Sets the password for the specified user
+                           (See Section 4.0)
 
-	set password <username> - Sets the password for the specified user
-							  (See Section 4.0)
+    add user <username> <password> [User|Admin] <full name> <home directory> 
+        - Adds a new user account  (See section 4.0 for details)			
 
-	add user <username> <password> [User|Admin] <full name> <home directory> 
-		- Adds a new user account  (See section 4.0 for details)			
+    remove user <username> - Removes an existing user account (See Section 4.0)
 
-	remove user <username> - Removes an existing user account (See Section 4.0)
-			
-	show active servers - Displays active server statistics.
+    show active servers - Displays active server statistics.
 
-	quit - Terminates the IFS process
+    quit - Terminates the IFS process
 
-	show commands - Shows console commands and their descriptions.
+    show commands - Shows console commands and their descriptions.
 
 
 4.0 User Accounts, Authentication, and Security
@@ -304,6 +331,50 @@ usage.
 
 You cannot run both the IFS server and a ContrAlto emulator on the same machine
 if they are configured to use UDP as the transport.
+
+5.1 Gateways and Routing
+------------------------
+
+The original IFS at PARC provided Gateway services for routing PUPs across
+multiple networks via various transports (ethernet, serial, modems and even
+experimental wireless networks).  It supported multi-hop routing that was
+in many ways similar to the modern Internet.
+
+The LCM+L IFS server provides single-hop routing via UDP.  This allows 
+the connection of multiple Alto networks together, either on a local network
+or over the global Internet.
+
+The networks involved are defined in the networks.txt configuration file
+(see Section 2.3) and specify what IP address corresponds to the network in
+question.  When the local IFS server receives a packet destined for another
+network, it uses networks.txt to figure out what IP to send it to.  Similarly,
+the local IFS server listens for incoming packets from other IFS servers and
+routes them onto the local network.
+
+Unlike the original IFS, routing is statically defined by networks.txt at
+startup and cannot be changed at runtime.  If in the future the advantages 
+of supporting a dynamic routing scheme outweigh the disadvantages (complication,
+security, etc.) this may be added.
+
+Additionally, routing is single-hop only.  The assumption is made that any
+site on a TCP/IP network can reach any other via the Internet or local 
+networking.  In effect, the real routing is done by TCP/IP, not IFS.  Multi-
+hop routing would be an interesting exercise but seems superfluous and as usual
+the decision was to err on the side of simplicity.
+
+Important things to keep in mind when configuring routing:
+    - Ensure all sites have unique network numbers:  make sure each IFS
+      server has a unique network number in ifs.cfg
+    - Ensure all IFS servers have entries in networks.txt (including the 
+      local IFS server!)
+    - Ensure the port you have specified for the local network in 
+      networks.txt is open, and is accessible by other IFS servers.
+    - It is useful (but not necessary) to have entries for IFS servers
+      and Alto hosts in hosts.txt
+
+If you need to debug routing, you can set "LogComponents" to "Routing" and
+LogTypes to "All" in ifs.cfg.  This will cause incoming and outgoing PUPs to
+be logged to the console as they are processed.
 
 6.0 Where to Find Alto Files
 ============================

@@ -1178,7 +1178,9 @@ namespace IFS.FTP
 
             if (user == null)
             {
-                SendFTPNoResponse(NoCode.AccessDenied, "Invalid username or password.");                
+                // Default to guest user.
+                user = UserToken.Guest;
+                //SendFTPNoResponse(NoCode.AccessDenied, "Invalid username or password.");                
             }
 
             return user;

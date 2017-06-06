@@ -42,8 +42,9 @@ namespace IFS.Logging
         BootServer = 0x400,
         UDP = 0x800,
         Mail = 0x1000,
+        Routing = 0x2000,
 
-        Configuration = 0x1000,
+        Configuration = 0x4000,
         All = 0x7fffffff
     }
 
@@ -99,7 +100,7 @@ namespace IFS.Logging
             {
                 //
                 // My log has something to tell you...                
-                Console.WriteLine(component.ToString() + ": " + message, args);
+                Console.WriteLine("[" + DateTime.Now + "] " + component.ToString() + ": " + message, args);
 
                 if (_logStream != null)
                 {

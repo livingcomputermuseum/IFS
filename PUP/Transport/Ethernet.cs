@@ -84,7 +84,7 @@ namespace IFS.Transport
 
             // addressing
             encapsulatedFrame[2] = p.DestinationPort.Host;
-            encapsulatedFrame[3] = p.SourcePort.Host;                                
+            encapsulatedFrame[3] = p.SourcePort.Host;
 
             // frame type
             encapsulatedFrame[4] = (byte)(_pupFrameType >> 8);
@@ -180,12 +180,17 @@ namespace IFS.Transport
                 // Read the type and switch on it
                 int etherType3mbit = ((packetStream.ReadByte() << 8) | (packetStream.ReadByte()));
 
-                if (etherType3mbit == _pupFrameType)
+                //
+                // Ensure this is a packet we're interested in.
+                //
+                if (etherType3mbit == _pupFrameType &&                          // it's a PUP
+                    (destination == DirectoryServices.Instance.LocalHost ||     // for us, or...
+                     destination == 0))                                         // broadcast
                 {
                     try
                     {
-                        PUP pup = new PUP(packetStream, length);                        
-                        _routerCallback(pup);
+                        PUP pup = new PUP(packetStream, length);
+                        _routerCallback(pup, destination != 0);
                     }
                     catch(Exception e)
                     {

@@ -18,10 +18,6 @@
 using IFS.Gateway;
 using IFS.Logging;
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading;
 
 namespace IFS
@@ -35,7 +31,11 @@ namespace IFS
     {
         public BreathOfLife()
         {
-            Log.Write(LogType.Verbose, LogComponent.BreathOfLife, "Breath Of Life service starting.  Broadcast interval is {0} milliseconds.", _bolPacketDelay);
+            Log.Write(LogType.Verbose, 
+                LogComponent.BreathOfLife, 
+                "Breath Of Life service starting.  Broadcast interval is {0} milliseconds.", 
+                Configuration.BOLDelay);
+
             _bolThread = new Thread(BreathOfLifeThread);
             _bolThread.Start();
         }
@@ -51,7 +51,8 @@ namespace IFS
             {
                 //
                 // Send BOL
-                //            
+                //
+
                 Router.Instance.Send(_bolPacket, DirectoryServices.Instance.LocalHost, _bolAddress, _bolPacketType);
 
                 Log.Write(LogType.Verbose, LogComponent.BreathOfLife, "Breath Of Life packet sent.");
@@ -59,7 +60,7 @@ namespace IFS
                 //
                 // Go to sleep.
                 //
-                Thread.Sleep(_bolPacketDelay);
+                Thread.Sleep(Configuration.BOLDelay);
 
                 //
                 // That's it.  Go home, do it again.
@@ -72,8 +73,6 @@ namespace IFS
 
         private const ushort _bolPacketType = 0x182;      // 602B
         private const byte _bolAddress = 0xff;            // 377B (boot address)
-
-        private const int _bolPacketDelay = 5000;         // 5 seconds
 
         /// <summary>
         /// The gold-standard BOL packet, containing the Alto ethernet bootstrap code. 

@@ -1,0 +1,20 @@
+﻿# networks.txt:
+#
+# This identifies known networks and provides the IPs for their IFS gateway servers.
+#
+# Each line in this file is of the format
+# <inter-network number>  <IFS host IP or hostname[:port]>
+#
+# for example:
+#   5#    132.22.110.96
+# would define network 5's gateway as 132.22.110.96 with the default port of 42425.
+#
+#   12#   myhostname.net:6666
+# defines network 12's gateway at myhostname.net, port 6666.
+#
+
+#
+# There must be an entry present for our local network, or else routing will be disabled.
+#
+
+#  1#  <your IP here>

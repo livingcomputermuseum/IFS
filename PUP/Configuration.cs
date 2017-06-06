@@ -79,6 +79,7 @@ namespace IFS
                 // Set to default.
                 UDPPort = 42424;
             }
+
         }
 
         /// <summary>
@@ -140,6 +141,11 @@ namespace IFS
         /// The type (Verbosity) of messages to log.
         /// </summary>
         public static readonly LogType LogTypes;
+
+        /// <summary>
+        /// The delay (in msec) between Breath Of Life packets
+        /// </summary>
+        public static readonly int BOLDelay;
 
 
         private static void ReadConfiguration()
