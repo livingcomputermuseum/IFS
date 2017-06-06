@@ -51,8 +51,8 @@ namespace IFS
 
         private static void PrintHerald()
         {
-            Console.WriteLine("LCM+L IFS v0.1, 12/14/2016.");
-            Console.WriteLine("(c) 2015, 2016 Living Computers: Museum+Labs.");
+            Console.WriteLine("LCM+L IFS v0.2, 12/14/2016.");
+            Console.WriteLine("(c) 2015-2017 Living Computers: Museum+Labs.");
             Console.WriteLine("Bug reports to joshd@livingcomputers.org");
             Console.WriteLine();
             Console.WriteLine();
