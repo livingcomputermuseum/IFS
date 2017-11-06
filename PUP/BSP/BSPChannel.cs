@@ -328,12 +328,12 @@ namespace IFS.BSP
             // If they don't match then we've lost a packet somewhere.
             if (dataPUP.ID != _recvPos)
             {
-                // Current behavior is to simply drop all incoming PUPs (and not ACK them) until they are re-sent to us
-                // (in which case the above sanity check will pass).  According to spec, AData requests that are not ACKed
-                // must eventually be resent.  This is far simpler than accepting out-of-order data and keeping track
-                // of where it goes in the queue, though less efficient.
+                // If we get an out of order packet, send an Ack so the sender will know our state.
+                // Otherwise, the sender will keep sending the following AData packet, which we don't want.
                 _inputLock.ExitUpgradeableReadLock();
+                _inputWriteEvent.Set();
                 Log.Write(LogType.Error, LogComponent.BSP, "Lost Packet, client ID does not match our receive position ({0} != {1})", dataPUP.ID, _recvPos);
+                SendAck();
                 return;
             }
 
