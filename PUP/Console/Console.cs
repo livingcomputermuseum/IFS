@@ -19,7 +19,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Text;
-using System.IO;
+using System.Threading;
 
 namespace IFS.IfsConsole
 {
@@ -162,6 +162,13 @@ namespace IFS.IfsConsole
         
         public void Run()
         {
+            if (Console.IsOutputRedirected || Console.IsInputRedirected)
+            {
+                // No console, so just run forever.
+                Thread.Sleep(Timeout.Infinite);
+                return;
+            }
+
             bool exit = false;
             while (!exit)
             {
