@@ -97,7 +97,11 @@ namespace IFS
 
         // Gateway Information Protocol
         GatewayInformationRequest = 128,
-        GatewayInformationResponse = 129
+        GatewayInformationResponse = 129,
+
+        // D0 Microcode (handled by misc. services)
+        MicrocodeRequest = 180,
+        MicrocodeReply = 181,
     }
 
     public struct PUPPort

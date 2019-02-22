@@ -53,7 +53,7 @@ namespace IFS.Transport
             _routerCallback = callback;
 
             // Now that we have a callback we can start receiving stuff.
-            Open(false /* not promiscuous */, int.MaxValue);
+            Open(false /* not promiscuous */, 0);
 
             // Kick off the receiver thread, this will never return or exit.
             Thread receiveThread = new Thread(new ThreadStart(BeginReceive));
@@ -207,7 +207,7 @@ namespace IFS.Transport
             else
             {
                 // Not a PUP, Discard the packet.  We will not log this, so as to keep noise down. 
-                //Log.Write(LogLevel.DroppedPacket, "Not a PUP.  Dropping.");
+                // Log.Write(LogType.Verbose, LogComponent.Ethernet, "Not a PUP (type 0x{0:x}.  Dropping.", p.Ethernet.EtherType);
             }
         }       
 
@@ -215,7 +215,7 @@ namespace IFS.Transport
         {
             _communicator = _interface.Open(
                 0xffff, 
-                promiscuous ? PacketDeviceOpenAttributes.Promiscuous | PacketDeviceOpenAttributes.NoCaptureLocal: PacketDeviceOpenAttributes.NoCaptureLocal, 
+                promiscuous ? PacketDeviceOpenAttributes.Promiscuous : PacketDeviceOpenAttributes.None, 
                 timeout);
 
             _communicator.SetKernelMinimumBytesToCopy(1);

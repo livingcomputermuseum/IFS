@@ -187,3 +187,7 @@ FakesAssemblies/
 GeneratedArtifacts/
 _Pvt_Extensions/
 ModelManifest.xml
+/PUP/.vs/IFS/v15/Server/sqlite3/db.lock
+/PUP/.vs/IFS/v15/Server/sqlite3/storage.ide
+/PUP/.vs/IFS/v15/Server/sqlite3/storage.ide-shm
+/PUP/.vs/IFS/v15/Server/sqlite3/storage.ide-wal

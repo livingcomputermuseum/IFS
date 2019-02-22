@@ -113,7 +113,11 @@ namespace IFS
 
                 case PupType.MailCheckRequestLaurel:
                     SendMailCheckResponse(p);
-                    break;  
+                    break;
+
+                case PupType.MicrocodeRequest:
+                    SendMicrocodeResponse(p);
+                    break;
 
                 default:
                     Log.Write(LogComponent.MiscServices, String.Format("Unhandled misc. protocol {0}", p.Type));
@@ -425,6 +429,90 @@ namespace IFS
 
                 Router.Instance.SendPup(mailReply);
             }
+        }
+
+        private void SendMicrocodeResponse(PUP p)
+        {
+            //
+            // The request PUP contains the file number in the lower-order 16-bits of the pup ID.
+            // Assuming the number is a valid bootfile, we start sending it to the client's port via EFTP.
+            // 
+            ushort fileNumber = (ushort)p.ID;
+
+            Log.Write(LogType.Verbose, LogComponent.MiscServices, "Microcode request is for file {0}.", fileNumber);
+
+            FileStream microcodeFile = BootServer.GetStreamForNumber(fileNumber);
+
+            if (microcodeFile == null)
+            {
+                Log.Write(LogType.Warning, LogComponent.MiscServices, "Microcode file {0} does not exist or could not be opened.", fileNumber);
+            }
+            else
+            {
+                // Send the file.  The MicrocodeReply protocol is extremely simple:
+                // Just send a sequence of MicrocodeReply PUPs containing the microcode data,
+                // there are no acks or flow control of any kind.
+                Log.Write(LogType.Warning, LogComponent.MiscServices, "Sending microcode file {0}.", fileNumber);
+                SendMicrocodeFile(p.SourcePort, microcodeFile);
+            }
+        }
+
+        private void SendMicrocodeFile(PUPPort sourcePort, Stream microcodeFile)
+        {
+            //
+            // "For version 1 of the protocol, a server willing to supply the data simply sends a sequence of packets
+            // of type MicrocodeReply as fast as it can.  The high half of its pupID contains the version number(1)
+            // and the low half of the pupID contains the packet sequence number. After all the data packets
+            // have been sent, the server sends an empty (0 data bytes) packet for an end marker.  There are no
+            // acknowledgments. This protocol is used by Dolphins and Dorados.
+            // Currently, the version 1 servers send packets containing 3 * n words of data.  This constraint is imposed by the
+            // Rev L Dolphin EPROM microcode.  I’d like to remove this restriction if I get a chance, so please don’t take
+            // advantage of it unless you need to.The Rev L Dolphin EPROM also requires the second word of the source
+            // socket to be 4. / HGM May - 80."
+            //
+
+            // TODO: this should happen in a worker thread.
+            //
+
+            //
+            // We send 192 words of data per PUP (3 * 64) in an attempt to make the Dolphin happy.
+            // We space these out a bit to give the D-machine time to keep up, we're much much faster than they are.
+            //
+            PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, 4);
+
+            byte[] buffer = new byte[384];
+            bool done = false;
+            uint id = 0;
+
+            while (!done)
+            {
+                int read = microcodeFile.Read(buffer, 0, buffer.Length);
+
+                if (read < buffer.Length)
+                {
+                    done = true;
+                }
+
+                if (read > 0)
+                {
+                    PUP microcodeReply = new PUP(PupType.MicrocodeReply, (id | 0x00010000), sourcePort, localPort, buffer);
+                    Router.Instance.SendPup(microcodeReply);
+                }
+
+                // Pause a bit to give the D0 time to breathe.
+                System.Threading.Thread.Sleep(5);
+
+                id++;
+            }
+
+            //
+            // Send an empty packet to conclude the transfer.
+            //
+            PUP endReply = new PUP(PupType.MicrocodeReply, (id | 0x00010000), sourcePort, localPort, new byte[] { });
+            Router.Instance.SendPup(endReply);
+
+            Log.Write(LogType.Warning, LogComponent.MiscServices, "Microcode file sent.");
+
         }
 
         private struct BootDirectoryBlock

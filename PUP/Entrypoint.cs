@@ -85,7 +85,8 @@ namespace IFS
                     {
                         foreach (LivePacketDevice device in LivePacketDevice.AllLocalMachine)
                         {
-                            if (device.GetNetworkInterface().Name.ToLowerInvariant() == Configuration.InterfaceName.ToLowerInvariant())
+                            if (device.GetNetworkInterface() != null &&
+                                device.GetNetworkInterface().Name.ToLowerInvariant() == Configuration.InterfaceName.ToLowerInvariant())
                             {
                                 Router.Instance.RegisterRAWInterface(device);
                                 bFound = true;
