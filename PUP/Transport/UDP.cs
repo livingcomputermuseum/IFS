@@ -265,7 +265,7 @@ namespace IFS.Transport
                 byte[] data = _udpClient.Receive(ref groupEndPoint);
 
                 // Drop our own UDP packets.
-                if (!groupEndPoint.Address.Equals(_thisIPAddress))
+                if (!groupEndPoint.Address.Equals(_thisIPAddress) && groupEndPoint.Port == Configuration.UDPPort)
                 {
                     Receive(new System.IO.MemoryStream(data));
                 }

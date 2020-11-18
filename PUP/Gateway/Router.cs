@@ -265,17 +265,21 @@ namespace IFS.Gateway
             if (p.DestinationPort.Network == DirectoryServices.Instance.LocalNetwork)
             {
                 //
-                // Send it out on the local network for anyone to see.
-                //
-                _pupPacketInterface.Send(p);
-
-                //
                 // And if it's intended for us (the IFS server) let our services have a crack at it, too.
                 //
                 if (p.DestinationPort.Host == DirectoryServices.Instance.LocalHostAddress.Host ||       // us specifically
                     p.DestinationPort.Host == 0)                                                        // broadcast
                 {
                     _localProtocolDispatcher.ReceivePUP(p);
+                }
+
+                //
+                // Send it out on the local network for anyone to see if it's not for us, or if it's a broadcast.
+                //
+                if (p.DestinationPort.Host != DirectoryServices.Instance.LocalHostAddress.Host ||       // not us
+                    p.DestinationPort.Host == 0)                                                        // broadcast
+                {
+                    _pupPacketInterface.Send(p);
                 }
             }
             else
@@ -325,7 +329,7 @@ namespace IFS.Gateway
             // properly.)
             Log.Write(LogComponent.Routing, "Gateway UDP Receiver thread started for port {0}.", _gatewayUdpPort);
 
-            IPEndPoint groupEndPoint = new IPEndPoint(IPAddress.Any, Configuration.UDPPort);
+            IPEndPoint groupEndPoint = new IPEndPoint(IPAddress.Any, _gatewayUdpPort);
 
             while (true)
             {
@@ -347,58 +351,46 @@ namespace IFS.Gateway
 
                     continue;
                 }
-
-                // 1) validate that the packet came in on the right port
-                // 2) validate packet
-                // 3) get a PUP out of it
-                // 4) send to RouteIncomingPacket.
-                // 5) do it again.
-                if (groupEndPoint.Port == _gatewayUdpPort)
+                
+                // 1) validate packet
+                // 2) get a PUP out of it
+                // 3) send to RouteIncomingPacket.
+                // 4) do it again.
+                if (data.Length < PUP.PUP_HEADER_SIZE + PUP.PUP_CHECKSUM_SIZE ||
+                    data.Length > PUP.MAX_PUP_SIZE + PUP.PUP_HEADER_SIZE + PUP.PUP_CHECKSUM_SIZE)
                 {
-                    if (data.Length < PUP.PUP_HEADER_SIZE + PUP.PUP_CHECKSUM_SIZE ||
-                        data.Length > PUP.MAX_PUP_SIZE + PUP.PUP_HEADER_SIZE + PUP.PUP_CHECKSUM_SIZE)
-                    {
-                        Log.Write(LogType.Error, LogComponent.Routing, "External PUP has an invalid size ({0}).  Dropping.", data.Length);
-                        continue;
-                    }
-
-                    try
-                    {
-                        //
-                        // See if we can get a PUP out of this.
-                        //
-                        PUP externalPUP = new PUP(new MemoryStream(data), data.Length);
-
-                        //
-                        // TODO: should technically bump the PUP's TransportControl field up;
-                        // really need to rewrite the PUP class to make this possible without
-                        // building up an entirely new PUP.
-                        //
-                        RouteIncomingExternalPacket(externalPUP);
-
-                        Log.Write(LogType.Verbose,
-                            LogComponent.Routing,
-                            "<- External PUP received from {0}:{1}, type {2} source {3} destination {4}.  Routing to local network.",                            
-                            groupEndPoint.Address,
-                            groupEndPoint.Port,
-                            externalPUP.Type,
-                            externalPUP.SourcePort,
-                            externalPUP.DestinationPort);
-                    }
-                    catch (Exception e)
-                    {
-                        Log.Write(LogType.Error, LogComponent.Routing, "Error handling external PUP: {0}", e.Message);
-                    }
+                    Log.Write(LogType.Error, LogComponent.Routing, "External PUP has an invalid size ({0}).  Dropping.", data.Length);
+                    continue;
                 }
-                else
+
+                try
                 {
-                    Log.Write(LogType.Verbose, 
-                        LogComponent.Routing, 
-                        "Packet from {0} received on wrong port ({1}), expected {2}.",
+                    //
+                    // See if we can get a PUP out of this.
+                    //
+                    PUP externalPUP = new PUP(new MemoryStream(data), data.Length);
+
+                    //
+                    // TODO: should technically bump the PUP's TransportControl field up;
+                    // really need to rewrite the PUP class to make this possible without
+                    // building up an entirely new PUP.
+                    //
+                    RouteIncomingExternalPacket(externalPUP);
+
+                    Log.Write(LogType.Verbose,
+                        LogComponent.Routing,
+                        "<- External PUP received from {0}:{1}, type {2} source {3} destination {4}.  Routing to local network.",
                         groupEndPoint.Address,
                         groupEndPoint.Port,
-                        _gatewayUdpPort);
+                        externalPUP.Type,
+                        externalPUP.SourcePort,
+                        externalPUP.DestinationPort);
                 }
+                catch (Exception e)
+                {
+                    Log.Write(LogType.Error, LogComponent.Routing, "Error handling external PUP: {0}", e.Message);
+                }
+                
             }
         }
 
