@@ -1,7 +1,7 @@
 Readme.txt for IFS v1.2:
 
-1. Introduction and Overview
-============================
+1.0 Introduction and Overview
+=============================
 
 In the 1970s, Xerox PARC developed a set of protocols based around the "PUP"
 (the "PARC Universal Packet").  These were intended to be a stopgap until
