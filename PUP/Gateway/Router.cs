@@ -104,6 +104,11 @@ namespace IFS.Gateway
                 _gatewayUdpClient.Close();
                 _gatewayUdpClientLock.ExitWriteLock();
             }
+
+            if (_gatewayReceiveThread.IsAlive)
+            {
+                _gatewayReceiveThread.Abort();
+            }
         }
 
         public void RegisterRAWInterface(LivePacketDevice iface)
@@ -337,6 +342,17 @@ namespace IFS.Gateway
                 try
                 {
                     data = _gatewayUdpClient.Receive(ref groupEndPoint);
+                }
+                catch(ThreadAbortException)
+                {
+                    break;
+                }
+                catch(System.ObjectDisposedException)
+                {
+                    Log.Write(LogType.Warning,
+                        LogComponent.Routing,
+                        "The UDP Client was disposed of. Ending gateway receive thread.");
+                    break;
                 }
                 catch(Exception e)
                 {
