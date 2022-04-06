@@ -105,10 +105,12 @@ namespace IFS.Gateway
                 _gatewayUdpClientLock.ExitWriteLock();
             }
 
-            if (_gatewayReceiveThread.IsAlive)
-            {
-                _gatewayReceiveThread.Abort();
-            }
+            try {
+                if (_gatewayReceiveThread.IsAlive)
+                {
+                    _gatewayReceiveThread.Abort();
+                }
+            } catch (System.NullReferenceException) {}
         }
 
         public void RegisterRAWInterface(LivePacketDevice iface)
