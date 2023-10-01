@@ -43,8 +43,9 @@ namespace IFS.Logging
         UDP = 0x800,
         Mail = 0x1000,
         Routing = 0x2000,
+        E3Mbit = 0x4000,
 
-        Configuration = 0x4000,
+        Configuration = 0x8000,
         All = 0x7fffffff
     }
 

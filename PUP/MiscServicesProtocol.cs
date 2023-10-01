@@ -24,8 +24,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.Threading;
 
 namespace IFS
 {
@@ -71,7 +70,7 @@ namespace IFS
     {
         public MiscServicesProtocol()
         {
-            
+
         }
 
         /// <summary>
@@ -139,8 +138,8 @@ namespace IFS
             //
             DateTime currentTime = DateTime.Now;
 
-            byte[] timeString = Helpers.StringToArray(currentTime.ToString("dd-MMM-yy HH:mm:ss"));            
-            
+            byte[] timeString = Helpers.StringToArray(currentTime.ToString("dd-MMM-yy HH:mm:ss"));
+
             PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.SourcePort.Socket);
             PUP response = new PUP(PupType.StringTimeReply, p.ID, p.SourcePort, localPort, timeString);
 
@@ -148,7 +147,7 @@ namespace IFS
         }
 
         private void SendAltoTimeReply(PUP p)
-        {            
+        {
             // So the Alto epoch is 1/1/1901.  For the time being to keep things simple we're assuming
             // GMT and no DST at all.  TODO: make this take into account our TZ, etc.
             //
@@ -167,8 +166,8 @@ namespace IFS
 
             // The epoch for .NET is 1/1/0001 at 12 midnight and is counted in 100-ns intervals.
             // Some conversion is needed, is what I'm saying.            
-            DateTime altoEpoch = new DateTime(1901, 1, 1);            
-                        
+            DateTime altoEpoch = new DateTime(1901, 1, 1);
+
             TimeSpan timeSinceAltoEpoch = new TimeSpan(currentTime.Ticks - altoEpoch.Ticks);
 
             UInt32 altoTime = (UInt32)timeSinceAltoEpoch.TotalSeconds;
@@ -178,9 +177,9 @@ namespace IFS
             time.DateTime = altoTime;
             time.TimeZone = 0;      // Hardcoded to GMT
             time.DSTStart = 366;    // DST not specified yet
-            time.DSTEnd = 366;            
+            time.DSTEnd = 366;
 
-            PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress,  p.DestinationPort.Socket);
+            PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
 
             // Response must contain our network number; this is used to tell clients what network they're on if they don't already know.
             PUPPort remotePort = new PUPPort(DirectoryServices.Instance.LocalNetwork, p.SourcePort.Host, p.SourcePort.Socket);
@@ -218,7 +217,7 @@ namespace IFS
                 // We have a result, pack the name into the response.
                 // NOTE: This is *not* a BCPL string, just the raw characters.
                 byte[] interNetworkName = Helpers.StringToArray(hostName);
-                
+
                 PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
                 PUP lookupReply = new PUP(PupType.AddressLookupResponse, p.ID, p.SourcePort, localPort, interNetworkName);
 
@@ -239,8 +238,8 @@ namespace IFS
         {
             //
             // For the request PUP:
-            //  A string consisting of an inter-network name expression.      
-            //  NOTE: This is *not* a BCPL string, just the raw characters.      
+            //  A string consisting of an inter-network name expression.
+            //  NOTE: This is *not* a BCPL string, just the raw characters.
             //
             // Response:
             //  One or more 6-byte blocks containing the address(es) corresponding to the
@@ -315,7 +314,7 @@ namespace IFS
 
             List<BootFileEntry> bootFiles = BootServer.EnumerateBootFiles();
 
-            foreach(BootFileEntry entry in bootFiles)
+            foreach (BootFileEntry entry in bootFiles)
             {
                 BootDirectoryBlock block;
                 block.FileNumber = entry.BootNumber;
@@ -323,7 +322,7 @@ namespace IFS
                 block.FileName = new BCPLString(entry.Filename);
 
                 byte[] serialized = Serializer.Serialize(block);
-                
+
                 //
                 // If this block fits into the current PUP, add it to the stream, otherwise send off the current PUP
                 // and start a new one.
@@ -375,7 +374,7 @@ namespace IFS
 
             int passwordOffset = (userName.Length % 2) == 0 ? userName.Length : userName.Length + 1;
             string password = Helpers.MesaArrayToString(p.Contents, passwordOffset + 4);
-            
+
             UserToken token = Authentication.Authenticate(userName, password);
 
             if (token == null)
@@ -411,7 +410,7 @@ namespace IFS
             // If mailbox name has a host/registry appended, we will strip it off.
             // TODO: probably should validate host...
             //
-            mailboxName = Authentication.GetUserNameFromFullName(mailboxName);            
+            mailboxName = Authentication.GetUserNameFromFullName(mailboxName);
 
             IEnumerable<string> mailList = MailManager.EnumerateMail(mailboxName);
 
@@ -434,30 +433,38 @@ namespace IFS
         private void SendMicrocodeResponse(PUP p)
         {
             //
+            // TODO; validate that this is a request for V1 of the protocol (I don't think there was ever another version...)
+            //
+
+            //
             // The request PUP contains the file number in the lower-order 16-bits of the pup ID.
             // Assuming the number is a valid bootfile, we start sending it to the client's port via EFTP.
             // 
             ushort fileNumber = (ushort)p.ID;
+            ushort version = (ushort)(p.ID >> 16);
 
-            Log.Write(LogType.Verbose, LogComponent.MiscServices, "Microcode request is for file {0}.", fileNumber);
+            Log.Write(LogType.Verbose, LogComponent.MiscServices, "Microcode request (version {0}) is for file {1}.", version, Helpers.ToOctal(fileNumber));
 
             FileStream microcodeFile = BootServer.GetStreamForNumber(fileNumber);
 
             if (microcodeFile == null)
             {
-                Log.Write(LogType.Warning, LogComponent.MiscServices, "Microcode file {0} does not exist or could not be opened.", fileNumber);
+                Log.Write(LogType.Warning, LogComponent.MiscServices, "Microcode file {0} does not exist or could not be opened.", Helpers.ToOctal(fileNumber));
             }
             else
             {
-                // Send the file.  The MicrocodeReply protocol is extremely simple:
+                // Send the file asynchronously.  The MicrocodeReply protocol is extremely simple:
                 // Just send a sequence of MicrocodeReply PUPs containing the microcode data,
                 // there are no acks or flow control of any kind.
-                Log.Write(LogType.Warning, LogComponent.MiscServices, "Sending microcode file {0}.", fileNumber);
-                SendMicrocodeFile(p.SourcePort, microcodeFile);
+                ThreadPool.QueueUserWorkItem((ctx) =>
+                {
+                    Log.Write(LogType.Warning, LogComponent.MiscServices, "Sending microcode file {0} ('{1}').", Helpers.ToOctal(fileNumber), microcodeFile.Name);
+                    SendMicrocodeFile(p.SourcePort, microcodeFile, fileNumber == 0x100 /* test for Initial.eb */);
+                }, null);
             }
         }
 
-        private void SendMicrocodeFile(PUPPort sourcePort, Stream microcodeFile)
+        private void SendMicrocodeFile(PUPPort sourcePort, Stream microcodeFile, bool sendEmptyPacket)
         {
             //
             // "For version 1 of the protocol, a server willing to supply the data simply sends a sequence of packets
@@ -467,25 +474,48 @@ namespace IFS
             // acknowledgments. This protocol is used by Dolphins and Dorados.
             // Currently, the version 1 servers send packets containing 3 * n words of data.  This constraint is imposed by the
             // Rev L Dolphin EPROM microcode.  I’d like to remove this restriction if I get a chance, so please don’t take
-            // advantage of it unless you need to.The Rev L Dolphin EPROM also requires the second word of the source
+            // advantage of it unless you need to.  The Rev L Dolphin EPROM also requires the second word of the source
             // socket to be 4. / HGM May - 80."
             //
 
-            // TODO: this should happen in a worker thread.
-            //
+            // Skip the first 256 header words in the microcode file.
+            microcodeFile.Seek(512, SeekOrigin.Begin);
 
             //
-            // We send 192 words of data per PUP (3 * 64) in an attempt to make the Dolphin happy.
+            // We send 258 words of data per PUP (3 * 86) in an attempt to make the Dolphin happy.
+            // This is what the original Xerox IFS code did.
             // We space these out a bit to give the D-machine time to keep up, we're much much faster than they are.
             //
-            PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, 4);
+            PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, SocketIDGenerator.GetNextSocketID() << 16 | 0x4);
 
-            byte[] buffer = new byte[384];
             bool done = false;
             uint id = 0;
 
+            //
+            // Send an empty packet to start the transfer.  The prom boot microcode will explicitly ignore this.
+            // Note that this is not documented in the (meager) protocol docs, nor does the BCPL IFS code
+            // appear to actually send such a packet, at least not explicitly.
+            // 
+            // Further:
+            // D0 Initial's E3Boot doesn't like the empty packet, and assumes it means the end of the microcode reply; it then
+            // tries to load a 0-length microcode file into CS and falls over.
+            // The below hacks around it (it only sends the empty packet when the Initial microcode file is requested).
+            // I'm unsure if there's a subtle bug in our IFS code here or elsewhere or a subtle bug in PARC's IFS code; it does kind of seem
+            // like the microcode is working around a weird issue but those folks were a lot smarter than I.
+            // Addendum 7/28/23:
+            // After reset, The real D0 seems to occasionally complete the first-stage (Initial) boot without the extra empty packet being sent.
+            // I wonder if there's a hardware glitch the boot microcode is working around.
+            // Additionally: the Dorado boot ucode source makes no mention of ignoring an empty packet, nor does the code implement such behavior.
+            //
+            if (sendEmptyPacket)
+            {
+                Router.Instance.SendPup(new PUP(PupType.MicrocodeReply, 0x10000, sourcePort, localPort, new byte[] { }));
+            }
+
+            uint checksum = 0;
             while (!done)
             {
+                byte[] buffer = new byte[258 * 2];  // 258 words, as the original IFS did
                 int read = microcodeFile.Read(buffer, 0, buffer.Length);
 
                 if (read < buffer.Length)
@@ -495,12 +525,23 @@ namespace IFS
 
                 if (read > 0)
                 {
-                    PUP microcodeReply = new PUP(PupType.MicrocodeReply, (id | 0x00010000), sourcePort, localPort, buffer);
+                    // Send ONLY the bytes we read.
+                    byte[] packetBuffer = new byte[read];
+                    Array.Copy(buffer, packetBuffer, read);
+                    PUP microcodeReply = new PUP(PupType.MicrocodeReply, (id | 0x10000), sourcePort, localPort, buffer);
                     Router.Instance.SendPup(microcodeReply);
+
+                    Log.Write(LogType.Warning, LogComponent.MiscServices, "Sequence {0} Sent {1} bytes of microcode file", id, read);
+
+                    for (int i = 0; i < read; i += 2)
+                    {
+                        checksum += (uint)(packetBuffer[i + 1] | (packetBuffer[i] << 8));
+                    }
                 }
 
                 // Pause a bit to give the D0 time to breathe.
-                System.Threading.Thread.Sleep(5);
+                // TODO: make this configurable?
+                System.Threading.Thread.Sleep(10);
 
                 id++;
             }
@@ -508,10 +549,9 @@ namespace IFS
             //
             // Send an empty packet to conclude the transfer.
             //
-            PUP endReply = new PUP(PupType.MicrocodeReply, (id | 0x00010000), sourcePort, localPort, new byte[] { });
-            Router.Instance.SendPup(endReply);
+            Router.Instance.SendPup(new PUP(PupType.MicrocodeReply, (id | 0x10000), sourcePort, localPort, new byte[] { }));
 
-            Log.Write(LogType.Warning, LogComponent.MiscServices, "Microcode file sent.");
+            Log.Write(LogType.Warning, LogComponent.MiscServices, "Microcode file sent.  Checksum {0:x4}", (checksum & 0xffff));
 
         }
 

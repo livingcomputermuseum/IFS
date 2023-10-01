@@ -28,7 +28,7 @@ using System.Threading;
 
 namespace IFS.Gateway
 {
-    public delegate void RoutePupCallback(PUP pup, bool route);
+    public delegate void ReceivedPacketCallback(MemoryStream packetStream, IPacketInterface receivingInterface);
 
     /// <summary>
     /// Implements gateway services, routing PUPs intended for other networks to
@@ -50,6 +50,7 @@ namespace IFS.Gateway
         {
             _localProtocolDispatcher = new PUPProtocolDispatcher();
             _routingTable = new RoutingTable();
+            _packetInterfaces = new List<IPacketInterface>();
 
             //
             // Look up our own network in the table and get our port.
@@ -96,7 +97,11 @@ namespace IFS.Gateway
         public void Shutdown()
         {
             _localProtocolDispatcher.Shutdown();
-            _pupPacketInterface.Shutdown();
+
+            foreach (IPacketInterface iface in _packetInterfaces)
+            {
+                iface.Shutdown();
+            }
 
             if (_gatewayUdpClient != null)
             {
@@ -109,19 +114,22 @@ namespace IFS.Gateway
         public void RegisterRAWInterface(LivePacketDevice iface)
         {
             Ethernet enet = new Ethernet(iface);
-
-            _pupPacketInterface = enet;
-            _rawPacketInterface = enet;
-            _pupPacketInterface.RegisterRouterCallback(RouteIncomingLocalPacket);
+            _packetInterfaces.Add(enet);
+            enet.RegisterRouterCallback(HandleIncomingPacket);
         }
 
         public void RegisterUDPInterface(NetworkInterface iface)
         {
             UDPEncapsulation udp = new UDPEncapsulation(iface);
+            _packetInterfaces.Add(udp);
+            udp.RegisterRouterCallback(HandleIncomingPacket);
+        }
 
-            _pupPacketInterface = udp;
-            _rawPacketInterface = udp;
-            _pupPacketInterface.RegisterRouterCallback(RouteIncomingLocalPacket);
+        public void RegisterBeagleBoneInterface()
+        {
+            Ether3MbitInterface bbInterface = new Ether3MbitInterface();
+            _packetInterfaces.Add(bbInterface);
+            bbInterface.RegisterRouterCallback(HandleIncomingPacket);
         }
 
         /// <summary>
@@ -142,9 +150,8 @@ namespace IFS.Gateway
         /// <param name="frameType"></param>
         public void Send(byte[] data, byte source, byte destination, ushort frameType)
         {
-            if (_rawPacketInterface != null)
-            {
-                _rawPacketInterface.Send(data, source, destination, frameType);
+            foreach(IPacketInterface iface in _packetInterfaces) {
+                iface.Send(data, source, destination, frameType);
             }
         }
 
@@ -163,7 +170,10 @@ namespace IFS.Gateway
             if (p.DestinationPort.Network == 0 ||
                 p.DestinationPort.Network == DirectoryServices.Instance.LocalNetwork)
             {
-                _pupPacketInterface.Send(p);
+                foreach (IPacketInterface iface in _packetInterfaces)
+                {
+                    iface.Send(p);
+                }
             }
             else
             {
@@ -201,6 +211,57 @@ namespace IFS.Gateway
                 //
                 // Not local, and we were asked not to route this PUP, so drop it on the floor.
                 //
+            }
+        }
+
+        /// <summary>
+        /// Handles an encapsulated 3mbit frame incoming from the receiver.
+        /// </summary>
+        /// <param name="packetStream"></param>
+        private void HandleIncomingPacket(MemoryStream packetStream, IPacketInterface receivingInterface)
+        {
+            // Read the length prefix (in words), convert to bytes.
+            // Subtract off 2 words for the ethernet header
+            int length = ((packetStream.ReadByte() << 8) | (packetStream.ReadByte())) * 2 - 4;
+
+            // Read the address (1st word of 3mbit packet)
+            byte destination = (byte)packetStream.ReadByte();
+            byte source = (byte)packetStream.ReadByte();
+
+            // Read the type and switch on it
+            int etherType3mbit = ((packetStream.ReadByte() << 8) | (packetStream.ReadByte()));
+
+            //
+            // Ensure this is a packet we're interested in.
+            //
+            if (Configuration.RunIFSServices &&                             // We're servicing packets
+                etherType3mbit == PupPacketBuilder.PupFrameType &&          // it's a PUP
+                (destination == DirectoryServices.Instance.LocalHost ||     // for us, or...
+                 destination == 0))                                         // broadcast
+            {
+                try
+                {
+                    PUP pup = new PUP(packetStream, length);
+                    RouteIncomingLocalPacket(pup, destination != 0);
+                }
+                catch (Exception e)
+                {
+                    // An error occurred, log it.
+                    Log.Write(LogType.Error, LogComponent.PUP, "Error handling PUP: {0}", e.Message);
+                }
+            }
+            else if (!Configuration.RunIFSServices)
+            {
+                // Bridge the packet through all registered interfaces other than the one it came in on
+                foreach (IPacketInterface iface in _packetInterfaces)
+                {
+                    if (iface != receivingInterface)
+                    {
+                        packetStream.Seek(0, SeekOrigin.Begin);
+                        Console.WriteLine("Sending to {0}", iface);
+                        iface.Send(packetStream);
+                    }
+                }
             }
         }
 
@@ -270,7 +331,10 @@ namespace IFS.Gateway
                 if (p.DestinationPort.Host == DirectoryServices.Instance.LocalHostAddress.Host ||       // us specifically
                     p.DestinationPort.Host == 0)                                                        // broadcast
                 {
-                    _localProtocolDispatcher.ReceivePUP(p);
+                    if (Configuration.RunIFSServices)
+                    {
+                        _localProtocolDispatcher.ReceivePUP(p);
+                    }
                 }
 
                 //
@@ -279,7 +343,10 @@ namespace IFS.Gateway
                 if (p.DestinationPort.Host != DirectoryServices.Instance.LocalHostAddress.Host ||       // not us
                     p.DestinationPort.Host == 0)                                                        // broadcast
                 {
-                    _pupPacketInterface.Send(p);
+                    foreach (IPacketInterface iface in _packetInterfaces)
+                    {
+                        iface.Send(p);
+                    }
                 }
             }
             else
@@ -395,14 +462,9 @@ namespace IFS.Gateway
         }
 
         /// <summary>
-        /// Our interface to a facility that can transmit/receive PUPs
+        /// The various interfaces we use to send and receive 3mbit ethernet packets, encapsulated or otherwise.
         /// </summary>
-        private IPupPacketInterface _pupPacketInterface;
-
-        /// <summary>
-        /// Our interface to a facility that can transmit raw Ethernet frames
-        /// </summary>
-        private IRawPacketInterface _rawPacketInterface;
+        private List<IPacketInterface> _packetInterfaces;
 
         /// <summary>
         /// Our UdpClient for sending PUPs to external networks.

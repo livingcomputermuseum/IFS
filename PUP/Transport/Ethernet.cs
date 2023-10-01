@@ -16,11 +16,6 @@
 */
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
 using PcapDotNet.Base;
 using PcapDotNet.Core;
 using PcapDotNet.Core.Extensions;
@@ -28,7 +23,6 @@ using PcapDotNet.Packets;
 using PcapDotNet.Packets.Ethernet;
 using IFS.Logging;
 using System.IO;
-using System.Net.NetworkInformation;
 using System.Threading;
 using IFS.Gateway;
 
@@ -41,14 +35,14 @@ namespace IFS.Transport
     /// Ethernet packets are broadcast.  See comments in UDP.cs for the reasoning behind this.
     /// 
     /// </summary>
-    public class Ethernet : IPupPacketInterface, IRawPacketInterface
+    public class Ethernet : IPacketInterface
     {
         public Ethernet(LivePacketDevice iface)
         {
-            _interface = iface;            
+            _interface = iface;
         }
 
-        public void RegisterRouterCallback(RoutePupCallback callback)
+        public void RegisterRouterCallback(ReceivedPacketCallback callback)
         {
             _routerCallback = callback;
 
@@ -63,7 +57,7 @@ namespace IFS.Transport
         public void Shutdown()
         {
             _routerCallback = null;
-            _communicator.Break();                        
+            _communicator.Break();
         }
         
         public void Send(PUP p)
@@ -71,75 +65,26 @@ namespace IFS.Transport
             //
             // Write PUP to ethernet:
             //
-            
-            // Build the outgoing data; this is:
-            // 1st word: length of data following
-            // 2nd word: 3mbit destination / source bytes
-            // 3rd word: frame type (PUP)
-            byte[] encapsulatedFrame = new byte[6 + p.RawData.Length];
-
-            // 3mbit Packet length
-            encapsulatedFrame[0] = (byte)((p.RawData.Length / 2 + 2) >> 8);
-            encapsulatedFrame[1] = (byte)(p.RawData.Length / 2 + 2);
-
-            // addressing
-            encapsulatedFrame[2] = p.DestinationPort.Host;
-            encapsulatedFrame[3] = p.SourcePort.Host;
-
-            // frame type
-            encapsulatedFrame[4] = (byte)(_pupFrameType >> 8);
-            encapsulatedFrame[5] = (byte)_pupFrameType;
-
-            // Actual data
-            p.RawData.CopyTo(encapsulatedFrame, 6);
-
-            MacAddress destinationMac = new MacAddress(_10mbitBroadcast);
-
-            // Build the outgoing packet; place the source/dest addresses, type field and the PUP data.                
-            EthernetLayer ethernetLayer = new EthernetLayer
-            {
-                Source = _interface.GetMacAddress(),
-                Destination = destinationMac,
-                EtherType = (EthernetType)_3mbitFrameType,
-            };                
-
-            PayloadLayer payloadLayer = new PayloadLayer
-            {
-                Data = new Datagram(encapsulatedFrame),
-            };
-
-            PacketBuilder builder = new PacketBuilder(ethernetLayer, payloadLayer);
-
-            // Send it over the 'net!
-            _communicator.SendPacket(builder.Build(DateTime.Now));            
+            byte[] encapsulatedFrame = PupPacketBuilder.BuildEncapsulatedEthernetFrameFromPup(p);
+            SendFrame(encapsulatedFrame);
         }
 
         public void Send(byte[] data, byte source, byte destination, ushort frameType)
         {
-            // Build the outgoing data; this is:
-            // 1st word: length of data following
-            // 2nd word: 3mbit destination / source bytes
-            // 3rd word: frame type (PUP)
-            byte[] encapsulatedFrame = new byte[6 + data.Length];
+            byte[] encapsulatedFrame = PupPacketBuilder.BuildEncapsulatedEthernetFrameFromRawData(data, source, destination, frameType);
+            SendFrame(encapsulatedFrame);
+        }
 
-            // 3mbit Packet length
-            encapsulatedFrame[0] = (byte)((data.Length / 2 + 2) >> 8);
-            encapsulatedFrame[1] = (byte)(data.Length / 2 + 2);
+        public void Send(MemoryStream encapsulatedFrameStream)
+        {
+            SendFrame(encapsulatedFrameStream.ToArray());
+        }
 
-            // addressing
-            encapsulatedFrame[2] = destination;
-            encapsulatedFrame[3] = source;
+        private void SendFrame(byte[] encapsulatedFrame)
+        {
+            MacAddress destinationMac = new MacAddress(_10mbitBroadcast);
 
-            // frame type
-            encapsulatedFrame[4] = (byte)(frameType >> 8);
-            encapsulatedFrame[5] = (byte)frameType;
-
-            // Actual data
-            data.CopyTo(encapsulatedFrame, 6);
-            
-            MacAddress destinationMac = new MacAddress(_10mbitBroadcast);            
-
-            // Build the outgoing packet; place the source/dest addresses, type field and the PUP data.                
+            // Build the outgoing packet; place the source/dest addresses, type field and the PUP data.
             EthernetLayer ethernetLayer = new EthernetLayer
             {
                 Source = _interface.GetMacAddress(),
@@ -160,56 +105,19 @@ namespace IFS.Transport
 
         private void ReceiveCallback(Packet p)
         {
-            //
-            // Filter out encapsulated 3mbit frames and look for PUPs, forward them on.
-            //
             if ((int)p.Ethernet.EtherType == _3mbitFrameType)
             {
                 Log.Write(LogType.Verbose, LogComponent.Ethernet, "3mbit pup received.");
 
                 MemoryStream packetStream = p.Ethernet.Payload.ToMemoryStream();
-
-                // Read the length prefix (in words), convert to bytes.
-                // Subtract off 2 words for the ethernet header
-                int length = ((packetStream.ReadByte() << 8) | (packetStream.ReadByte())) * 2  - 4;
-
-                // Read the address (1st word of 3mbit packet)
-                byte destination = (byte)packetStream.ReadByte();
-                byte source = (byte)packetStream.ReadByte();
-
-                // Read the type and switch on it
-                int etherType3mbit = ((packetStream.ReadByte() << 8) | (packetStream.ReadByte()));
-
-                //
-                // Ensure this is a packet we're interested in.
-                //
-                if (etherType3mbit == _pupFrameType &&                          // it's a PUP
-                    (destination == DirectoryServices.Instance.LocalHost ||     // for us, or...
-                     destination == 0))                                         // broadcast
-                {
-                    try
-                    {
-                        PUP pup = new PUP(packetStream, length);
-                        _routerCallback(pup, destination != 0);
-                    }
-                    catch(Exception e)
-                    {
-                        // An error occurred, log it.
-                        Log.Write(LogType.Error, LogComponent.PUP, "Error handling PUP: {0}", e.Message);
-                    }
-
-                }
-                else
-                {
-                    Log.Write(LogType.Warning, LogComponent.Ethernet, "3mbit packet is not a PUP, dropping");
-                }
+                _routerCallback(packetStream, this);
             }
             else
             {
-                // Not a PUP, Discard the packet.  We will not log this, so as to keep noise down. 
+                // Not an encapsulated 3mbit frame, Discard the packet.  We will not log this, so as to keep noise down. 
                 // Log.Write(LogType.Verbose, LogComponent.Ethernet, "Not a PUP (type 0x{0:x}.  Dropping.", p.Ethernet.EtherType);
             }
-        }       
+        }
 
         private void Open(bool promiscuous, int timeout)
         {
@@ -231,12 +139,9 @@ namespace IFS.Transport
 
         private LivePacketDevice _interface;
         private PacketCommunicator _communicator;
-        private RoutePupCallback _routerCallback;
+        private ReceivedPacketCallback _routerCallback;
 
         // Constants
-
-        // The ethertype used in the encapsulated 3mbit frame
-        private readonly ushort _pupFrameType = 512;
 
         // The type used for 3mbit frames encapsulated in 10mb frames
         private readonly int _3mbitFrameType = 0xbeef;     // easy to identify, ostensibly unused by anything of any import        

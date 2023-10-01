@@ -16,12 +16,7 @@
 */
 
 using IFS.Gateway;
-using PcapDotNet.Packets;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.IO;
 
 namespace IFS.Transport
 {
@@ -41,7 +36,7 @@ namespace IFS.Transport
         /// Registers a callback (into the router) to be invoked on receipt of a PUP.
         /// </summary>
         /// <param name="callback"></param>
-        void RegisterRouterCallback(RoutePupCallback callback);
+        void RegisterRouterCallback(ReceivedPacketCallback callback);
 
         /// <summary>
         /// Shuts down the interface.
@@ -69,5 +64,18 @@ namespace IFS.Transport
         /// <param name="destination"></param>
         /// <param name="frameType"></param>
         void Send(byte[] data, byte source, byte destination, ushort frameType);
+
+        /// <summary>
+        /// Sends the specified data over the transport.
+        /// </summary>
+        /// <param name="stream"></param>
+        void Send(MemoryStream encapsulatedFrameStream);
     }
+
+    public interface IPacketInterface : IPupPacketInterface, IRawPacketInterface
+    {
+
+    }
+
+    
 }

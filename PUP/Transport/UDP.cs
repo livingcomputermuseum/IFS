@@ -62,7 +62,7 @@ namespace IFS.Transport
     /// and go with the broadcast implementation.
     /// 
     /// </summary>
-    public class UDPEncapsulation : IPupPacketInterface, IRawPacketInterface
+    public class UDPEncapsulation : IPacketInterface
     {
         public UDPEncapsulation(NetworkInterface iface)
         {
@@ -78,7 +78,7 @@ namespace IFS.Transport
                 // Grab the broadcast address for the interface so that we know what broadcast address to use
                 // for our UDP datagrams.
                 //
-                IPInterfaceProperties props = iface.GetIPProperties();                
+                IPInterfaceProperties props = iface.GetIPProperties();
 
                 foreach (UnicastIPAddressInformation unicast in props.UnicastAddresses)
                 {
@@ -117,11 +117,11 @@ namespace IFS.Transport
         /// Registers a gateway to handle incoming PUPs.
         /// </summary>
         /// <param name="callback"></param>
-        public void RegisterRouterCallback(RoutePupCallback callback)
+        public void RegisterRouterCallback(ReceivedPacketCallback callback)
         {
             _routerCallback = callback;
 
-            // Now that we have a callback we can start receiving stuff.            
+            // Now that we have a callback we can start receiving stuff.
             BeginReceive();
         }
 
@@ -136,37 +136,16 @@ namespace IFS.Transport
             //
             // Write PUP to UDP:
             //
-            // For now, no actual routing (Gateway not implemented yet), everything is on the same 'net.
             // Just send a broadcast UDP with the encapsulated frame inside of it.
-            //           
+            //
+            byte[] encapsulatedFrame = PupPacketBuilder.BuildEncapsulatedEthernetFrameFromPup(p);
 
-            // Build the outgoing data; this is:
-            // 1st word: length of data following
-            // 2nd word: 3mbit destination / source bytes
-            // 3rd word: frame type (PUP)
-            byte[] encapsulatedFrame = new byte[6 + p.RawData.Length];
-
-            // 3mbit Packet length
-            encapsulatedFrame[0] = (byte)((p.RawData.Length / 2 + 2) >> 8);
-            encapsulatedFrame[1] = (byte)(p.RawData.Length / 2 + 2);
-
-            // addressing
-            encapsulatedFrame[2] = p.DestinationPort.Host;
-            encapsulatedFrame[3] = p.SourcePort.Host;
-
-            // frame type
-            encapsulatedFrame[4] = (byte)(_pupFrameType >> 8);
-            encapsulatedFrame[5] = (byte)_pupFrameType;
-
-            // Actual data
-            p.RawData.CopyTo(encapsulatedFrame, 6);            
-
-            // Send as UDP broadcast.            
-            _udpClient.Send(encapsulatedFrame, encapsulatedFrame.Length, _broadcastEndpoint);               
+            // Send as UDP broadcast.
+            _udpClient.Send(encapsulatedFrame, encapsulatedFrame.Length, _broadcastEndpoint);
         }
 
         /// <summary>
-        /// Sends an array of bytes over the ethernet as a 3mbit packet encapsulated in a 10mbit packet.
+        /// Sends an array of bytes over the network as a 3mbit packet encapsulated in a UDP datagram.
         /// </summary>
         /// <param name="packet"></param>
         /// <param name="hostId"></param>
@@ -176,66 +155,26 @@ namespace IFS.Transport
             // 1st word: length of data following
             // 2nd word: 3mbit destination / source bytes
             // 3rd word: frame type (PUP)
-            byte[] encapsulatedFrame = new byte[6 + data.Length];
+            byte[] encapsulatedFrame = PupPacketBuilder.BuildEncapsulatedEthernetFrameFromRawData(data, source, destination, frameType);
 
-            // 3mbit Packet length
-            encapsulatedFrame[0] = (byte)((data.Length / 2 + 2) >> 8);
-            encapsulatedFrame[1] = (byte)(data.Length / 2 + 2);
+            // Send as UDP broadcast.
+            _udpClient.Send(encapsulatedFrame, encapsulatedFrame.Length, _broadcastEndpoint);
+        }
 
-            // addressing
-            encapsulatedFrame[2] = destination;
-            encapsulatedFrame[3] = source;
-
-            // frame type
-            encapsulatedFrame[4] = (byte)(frameType >> 8);
-            encapsulatedFrame[5] = (byte)frameType;
-
-            // Actual data
-            data.CopyTo(encapsulatedFrame, 6);            
-
-            // Send as UDP broadcast.            
-            _udpClient.Send(encapsulatedFrame, encapsulatedFrame.Length, _broadcastEndpoint);                        
+        /// <summary>
+        /// Sends a stream of bytes over the network as a 3mbit packet encapsulated in a UDP datagram.
+        /// </summary>
+        /// <param name="encapsulatedPacketStream"></param>
+        public void Send(MemoryStream encapsulatedPacketStream)
+        {
+            // Send as UDP broadcast.
+            byte[] buf = encapsulatedPacketStream.ToArray();
+            _udpClient.Send(buf, buf.Length, _broadcastEndpoint);
         }
 
         private void Receive(MemoryStream packetStream)
         {
-            //
-            // Look for PUPs, forward them on.
-            //
-                           
-            // Read the length prefix (in words), convert to bytes.
-            // Subtract off 2 words for the ethernet header
-            int length = ((packetStream.ReadByte() << 8) | (packetStream.ReadByte())) * 2 - 4;
-
-            // Read the address (1st word of 3mbit packet)
-            byte destination = (byte)packetStream.ReadByte();
-            byte source = (byte)packetStream.ReadByte();
-
-            // Read the type and switch on it
-            int etherType3mbit = ((packetStream.ReadByte() << 8) | (packetStream.ReadByte()));
-
-            //
-            // Ensure this is a packet we're interested in.
-            //
-            if (etherType3mbit == _pupFrameType &&                              // it's a PUP
-                    (destination == DirectoryServices.Instance.LocalHost ||     // for us, or...
-                     destination == 0))                                         // broadcast
-            {
-                try
-                {
-                    PUP pup = new PUP(packetStream, length);
-                    _routerCallback(pup, destination != 0);
-                }
-                catch(Exception e)
-                {
-                    // An error occurred, log it.
-                    Log.Write(LogType.Error, LogComponent.PUP, "Error handling PUP: {0}", e.Message);
-                }
-            }
-            else
-            {
-                Log.Write(LogType.Warning, LogComponent.Ethernet, "UDP packet is not a PUP, dropping");
-            }        
+            _routerCallback(packetStream, this);
         }
 
         /// <summary>
@@ -258,7 +197,7 @@ namespace IFS.Transport
             // properly.)
             Log.Write(LogComponent.UDP, "UDP Receiver thread started.");
 
-            IPEndPoint groupEndPoint = new IPEndPoint(IPAddress.Any, Configuration.UDPPort);            
+            IPEndPoint groupEndPoint = new IPEndPoint(IPAddress.Any, Configuration.UDPPort);
 
             while (true)
             {
@@ -285,12 +224,9 @@ namespace IFS.Transport
             }
 
             return new IPAddress(broadcastAddress);
-        }               
-       
-        // The ethertype used in the encapsulated 3mbit frame
-        private readonly ushort _pupFrameType = 512;
+        }
 
-        private RoutePupCallback _routerCallback;
+        private ReceivedPacketCallback _routerCallback;
 
         // Thread used for receive
         private Thread _receiveThread;

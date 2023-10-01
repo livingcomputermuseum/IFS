@@ -15,20 +15,12 @@
     along with IFS.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-using IFS.Boot;
-using IFS.CopyDisk;
-using IFS.FTP;
 using IFS.Gateway;
 using IFS.IfsConsole;
-using IFS.Transport;
 using PcapDotNet.Core;
 using PcapDotNet.Core.Extensions;
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Net.NetworkInformation;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace IFS
 {
@@ -36,9 +28,9 @@ namespace IFS
     {        
         static void Main(string[] args)
         {
-            PrintHerald();         
+            PrintHerald();
 
-            RegisterInterface();
+            RegisterInterfaces();
 
             // This runs forever, or until the user tells us to exit.
             RunCommandPrompt();
@@ -51,61 +43,69 @@ namespace IFS
 
         private static void PrintHerald()
         {
-            Console.WriteLine("LCM+L IFS v0.3, 11/17/2020.");
-            Console.WriteLine("(c) 2015-2020 Living Computers: Museum+Labs.");
-            Console.WriteLine("Bug reports to joshd@livingcomputers.org");
+            Console.WriteLine($"LCM+L IFS {typeof(Entrypoint).Assembly.GetName().Version}, 9/30/2023");
+            Console.WriteLine("(c) 2015-2020 Living Computers: Museum+Labs, 2020-2023 Josh Dersch");
             Console.WriteLine();
             Console.WriteLine();
-        }        
+        }
 
-        private static void RegisterInterface()
+        private static void RegisterInterfaces()
         {
             bool bFound = false;
 
-            switch (Configuration.InterfaceType.ToLowerInvariant())
+            string[] selectedInterfaces = Configuration.InterfaceTypes.ToLowerInvariant().Split(new char[] { ' ', '\t', ',' }, StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (string ifaceName in selectedInterfaces)
             {
-                case "udp":
-                    // Find matching network interface
-                    {
-                        NetworkInterface[] ifaces = NetworkInterface.GetAllNetworkInterfaces();
-                        foreach(NetworkInterface iface in ifaces)
+                switch (ifaceName)
+                {
+                    case "udp":
+                        // Find matching network interface
                         {
-                            if (iface.Name.ToLowerInvariant() == Configuration.InterfaceName.ToLowerInvariant())
+                            NetworkInterface[] ifaces = NetworkInterface.GetAllNetworkInterfaces();
+                            foreach (NetworkInterface iface in ifaces)
                             {
-                                Router.Instance.RegisterUDPInterface(iface);
-                                bFound = true;
-                                break;
+                                if (iface.Name.ToLowerInvariant() == Configuration.InterfaceName.ToLowerInvariant())
+                                {
+                                    Router.Instance.RegisterUDPInterface(iface);
+                                    bFound = true;
+                                    break;
+                                }
                             }
                         }
-                    }
-                    break;
+                        break;
 
-                case "raw":
-                    // Find matching RAW interface
-                    {
-                        foreach (LivePacketDevice device in LivePacketDevice.AllLocalMachine)
+                    case "raw":
+                        // Find matching RAW interface
                         {
-                            if (device.GetNetworkInterface() != null &&
-                                device.GetNetworkInterface().Name.ToLowerInvariant() == Configuration.InterfaceName.ToLowerInvariant())
+                            foreach (LivePacketDevice device in LivePacketDevice.AllLocalMachine)
                             {
-                                Router.Instance.RegisterRAWInterface(device);
-                                bFound = true;
-                                break;
+                                if (device.GetNetworkInterface() != null &&
+                                    device.GetNetworkInterface().Name.ToLowerInvariant() == Configuration.InterfaceName.ToLowerInvariant())
+                                {
+                                    Router.Instance.RegisterRAWInterface(device);
+                                    bFound = true;
+                                    break;
+                                }
                             }
-                        }                        
-                    }
-                    break;
+                        }
+                        break;
 
-                default:
+                    case "3mbit":
+                        Router.Instance.RegisterBeagleBoneInterface();
+                        break;
+
+                    default:
+                        throw new InvalidConfigurationException(
+                            String.Format("The specified interface type ({0}) is invalid.", Configuration.InterfaceTypes));
+                }
+
+                // Not found.
+                if (!bFound)
+                {
                     throw new InvalidConfigurationException(
-                        String.Format("The specified interface type ({0}) is invalid.", Configuration.InterfaceType));
-            }
-
-            // Not found.
-            if (!bFound)
-            {
-                throw new InvalidConfigurationException(
-                    String.Format("The specified network interface ({0}) is invalid or unusable by IFS.", Configuration.InterfaceName));
+                        String.Format("The specified network interface ({0}) is invalid or unusable by IFS.", Configuration.InterfaceName));
+                }
             }
         }
 

@@ -83,9 +83,9 @@ namespace IFS
         }
 
         /// <summary>
-        /// The type of interface (UDP or RAW) to communicate over
+        /// The type of interface(s) (UDP, RAW, or 3mbit) to communicate over
         /// </summary>
-        public static readonly string InterfaceType;
+        public static readonly string InterfaceTypes;
 
         /// <summary>
         /// The name of the network interface to use
@@ -96,6 +96,11 @@ namespace IFS
         /// The UDP port to use when using a UDP interface.
         /// </summary>
         public static readonly int UDPPort;
+
+        /// <summary>
+        /// Whether to run IFS Services or just bridge interfaces.
+        /// </summary>
+        public static readonly bool RunIFSServices;
 
         /// <summary>
         /// The network that this server lives on
@@ -208,6 +213,13 @@ namespace IFS
                             {
                                 switch (field.FieldType.Name)
                                 {
+                                    case "Boolean":
+                                        {
+                                            bool b = bool.Parse(value);
+                                            field.SetValue(null, b);
+                                        }
+                                        break;
+
                                     case "Int32":
                                         {
                                             int v = int.Parse(value);
@@ -248,7 +260,7 @@ namespace IFS
                             "ifs.cfg line {0}: Unknown configuration parameter '{1}'.", lineNumber, parameter);
                     }
                 }
-            }                     
+            }
         }
     }
 }
