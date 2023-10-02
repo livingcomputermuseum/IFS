@@ -1,4 +1,4 @@
-Readme.txt for IFS v1.2:
+Readme.txt for IFS v1.4:
 
 1.0 Introduction and Overview
 =============================
@@ -6,13 +6,15 @@ Readme.txt for IFS v1.2:
 In the 1970s, Xerox PARC developed a set of protocols based around the "PUP"
 (the "PARC Universal Packet").  These were intended to be a stopgap until
 something "real" could be designed and implemented, so the suite was referred 
-to as "IFS" ("Interim File Server").  That "real" implementation never came
+to as "IFS" ("Interim File Server").  That real"implementation never came
 into being during the Alto's lifetime, so the IFS was a permanent fixture of
 the network environment at PARC during the heyday of the Alto.
 
 The LCM+L's IFS implementation is an implementation of this protocol suite
-that runs on a modern PC, and is designed to work with the ContrAlto Alto
-emulator over either Raw Ethernet packets or UDP broadcasts.
+that runs on a modern PC.  It is designed to work with the ContrAlto Alto
+emulator over either Raw Ethernet packets or UDP broadcasts, as well as with
+real hardware when using the BeagleBone-based Alto Ethernet Interface available at
+https://github.com/shirriff/alto-ethernet-interface.
 
 It provides the following IFS services:
 
@@ -84,8 +86,12 @@ Directory configuration:
                     (User mail folders are placed in this directory.)
 
 Interface configuration:
-    - InterfaceType:    "RAW" or "UDP".  Specifies the transport to use for
-                        communication.
+    - InterfaceTypes:   Any combination of "RAW" "UDP" or "3MBIT".  Specifies 
+                        the transports to use for communication:
+                        - RAW: Raw Ethernet frames
+                        - UDP: UDP Datagram
+                        - 3MBIT: The Beaglebone-based Alto Ethernet Interface
+
     - InterfaceName:    The name of the host network adapter to use for 
                         communication.
 
@@ -104,6 +110,12 @@ Debugging configuration:
                         DirectoryServices, PUP, FTP, BreathOfLife, EFTP,
                         BootServer, UDP, Mail, Configuration, or All
 
+Misc:
+    - RunIFSServices:   Whether to run the full suite of IFS services or just
+                        perform basic bridging (this is mostly useful when
+                        working with real hardware via the Alto Interface Hardware
+                        at https://github.com/shirriff/alto-ethernet-interface.)
+
 2.2 hosts.txt:
 --------------
 
@@ -115,11 +127,11 @@ name and a hostname to associate with it, separated by whitespace.  At this
 time, each inter-network name maps to exactly one hostname.
 
 A Xerox "inter-network name" defines a host number and a network number, and is
-expressed in the format "<network>#<host>#", where both <network> and <host>
+expressed in the format "\<network\>#\<host\>#", where both \<network\> and \<host\>
 are octal values between 0 and 377.  So, for example, an Alto on network 5
 with host number 72 would have an inter-network name of "5#72#".  Hosts on the
 same network as the IFS server (see Section 2.1 for IFS server configuration)
-need not specify the network number and have the format of "<host>#".
+need not specify the network number and have the format of "\<host\>#".
 
 A Hostname is an alphanumeric sequence that must begin with a letter.
 
@@ -145,7 +157,7 @@ their IFS gateway servers.  See Section 5 for more details on gateways.
 This file is processed when IFS starts.
 
 Each line in this file is of the format
- <inter-network number>  <IFS host IP or hostname>[:port]
+ \<inter-network number\>  \<IFS host IP or hostname\>[:port]
 
 For example:
    5#    192.168.1.137
@@ -204,7 +216,7 @@ accounts, so comments will be lost.  It is generally advisable to use the
 console to add, remove, or change user accounts.
 
 Each user definition is a line in the format:
-<username>:<password hash>:<privileges>:<full user name>:<home directory>
+\<username\>:\<password hash\>:\<privileges\>:\<full user name\>:\<home directory\>
 
     - username:         an alphanumeric sequence starting with a letter.  This
                         define's the user's login name.
@@ -226,7 +238,7 @@ see Section 3.0).
 3.0 The Command Console
 =======================
 
-The IFS server provides a command console, designated by the ">" prompt.  The 
+The IFS server provides a command console, designated by the "\>" prompt.  The 
 console provides numerous commands for managing the state of the server and
 for managing user accounts.
 
@@ -240,15 +252,15 @@ Here is a rundown of the basic command set:
 
     show users - Displays the current user database (See Section 4.0)
 
-    show user <username> - Displays information for the specified user
+    show user \<username\> - Displays information for the specified user
                            (See Section 4.0)
-    set password <username> - Sets the password for the specified user
+    set password \<username\> - Sets the password for the specified user
                            (See Section 4.0)
 
-    add user <username> <password> [User|Admin] <full name> <home directory> 
+    add user \<username\> \<password\> [User|Admin] \<full name\> \<home directory\> 
         - Adds a new user account  (See section 4.0 for details)			
 
-    remove user <username> - Removes an existing user account (See Section 4.0)
+    remove user \<username\> - Removes an existing user account (See Section 4.0)
 
     show active servers - Displays active server statistics.
 
@@ -398,9 +410,9 @@ The following documents may be useful in actually using the Alto-land client
 tools (FTP, CopyDisk, mail, etc) to communicate with the IFS server:
 
 The Alto User's Handbook: 
-	http://bitsavers.org/pdf/xerox/alto/Alto_Users_Handbook_Sep79.pdf
+    http://bitsavers.org/pdf/xerox/alto/Alto_Users_Handbook_Sep79.pdf
 Alto Subsystems: 
-	http://bitsavers.org/pdf/xerox/alto/memos_1981/Alto_Subsystems_May81.pdf
+    http://bitsavers.org/pdf/xerox/alto/memos_1981/Alto_Subsystems_May81.pdf
 
 
 The following specifications were used to implement the IFS protocol suite:
@@ -414,16 +426,48 @@ Misc Services:
 http://xeroxalto.computerhistory.org/_cd8_/pup/.miscservices.press!1.pdf
 
 
-8.0 Packet-Level Protocol
+8.0 Using With Real Hardware
+============================
+
+IFS can be used to talk with real hardware that has a 3mbit Ethernet interface
+(Altos, Dolphins, Dorados, PERQs, and early Sun hardware).
+This is accomplished by using the BeagleBone Alto Ethernet Interface developed by
+Ken Sherriff and documented here: https://github.com/shirriff/alto-ethernet-interface.
+
+Ken provides his own modification of this IFS code to use with his hardware, 
+but as of V1.4, this IFS implementation provides all the functionality of his
+software, making his fork unnecessary.  All that is necessary is to place the
+release binaries on the BeagleBone and ensure that IFS.exe is running (you must
+disable any earlier versions of IFS.exe and the 'gateway' program before doing so.)
+
+Use of the BeagleBone Alto Ethernet Interface is enabled by specifying "3MBIT" as one
+of the InterfaceTypes options in Ifs.cfg (see section 2.1).
+
+When running in this configuration, by default IFS will run just as it does on desktop PCs and
+will provide network services directly to the system it is connected to.
+
+8.1 Bridging Mode
+-----------------
+Additionally, by setting the "RunIFSServices" parameter to false, IFS will run in 
+a mode where it does not provide any IFS services, but instead bridges interfaces together:
+Packets received from a real Alto will be sent out over UDP and RAW interfaces (if configured)
+and similarly, packets coming in over UDP and RAW interfaces will be sent to the real Alto.
+This allows the IFS software to let real hardware directly communicate with other 3mbit devices on
+your local network (real or emulated) with a minimum of effort.  The expectation in this
+mode is that some other system on the network (a PC or a server somewhere) will be providing
+IFS services, not the IFS running on the BeagleBone.
+
+
+9.0 Packet-Level Protocol
 =========================
 
 IFS (and ContrAlto) use a very simple encapsulation for transmitting 3mbit 
 Ethernet packets over modern transports.  An encapsulated packet consists of
 two fields:  
-	- Packet Length (2 bytes): Length (in 16-bit words) of the 3mbit Packet 
-		Data field (see below)
-	- Packet Data (N bytes): The 3mbit packet, including 3mbit Ethernet header
-		but excluding the checksum word.
+    - Packet Length (2 bytes): Length (in 16-bit words) of the 3mbit Packet 
+        Data field (see below)
+    - Packet Data (N bytes): The 3mbit packet, including 3mbit Ethernet header
+        but excluding the checksum word.
 
 All words are stored in big-endian format.
 
@@ -437,9 +481,8 @@ As discussed in Section 5.0, all packets are broadcast.  The technical reasons
 for this are documented in the source code; see Transport\UDP.cs for details.
 
 
-9.0 Thanks
+10.0 Thanks
 ==========
 
 This project would not have been possible without the conservation efforts of
 the CHM and Bitsavers.
-
