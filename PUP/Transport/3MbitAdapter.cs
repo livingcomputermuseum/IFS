@@ -41,16 +41,10 @@ namespace IFS.Transport
     {
         public Ether3MbitInterface()
         {
-            try
-            {
-                InitializePRU();
-                StartReceiver();
-            }
-            catch (Exception e) 
-            {
-                Log.Write(LogType.Error, LogComponent.E3Mbit, "Failed to initialize the BeagleBone 3Mbit Interface.  Error: {0}", e.Message);
-                return;
-            }
+            _ledController = new BeagleBoneLedController();
+            InitializePRU();
+            StartReceiver();
+            StartHeartbeat();
         }
 
         public void RegisterRouterCallback(ReceivedPacketCallback callback)
@@ -158,6 +152,20 @@ namespace IFS.Transport
             Log.Write(LogType.Normal, LogComponent.E3Mbit, "PRU Initialization completed.");
         }
 
+        private void StartHeartbeat()
+        {
+            ThreadPool.QueueUserWorkItem((ctx) =>
+            {
+                while(true)
+                {
+                    _ledController.BlinkLed(0, 500);
+                    Thread.Sleep(75);
+                    _ledController.BlinkLed(0, 100);
+                    Thread.Sleep(100);                    
+                }
+            }, null);
+        }
+
         private void StartReceiver()
         {
             ThreadPool.QueueUserWorkItem((ctx) =>
@@ -182,7 +190,7 @@ namespace IFS.Transport
                 PRU.prussdrv_pru_clear_event(PRU.PRU_EVTOUT_0, PRU.PRU0_ARM_INTERRUPT);
 
                 if (HostOwnsReadBuffer())
-                {
+                {                    
                     // PRU gave us a read packet from the 3mbit Ether, handle it.
                     ReceiveFromNetworkInterface();
                 }
@@ -238,6 +246,7 @@ namespace IFS.Transport
         /// </summary>
         private void ReceiveFromNetworkInterface()
         {
+            _ledController.SetLed(3, 1);
             PruInterfaceControlBlock cb = GetInterfaceControlBlock();
 
             if (cb.r_truncated != 0)
@@ -295,6 +304,7 @@ namespace IFS.Transport
 
             MemoryStream packetStream = new MemoryStream(encapsulatedPacket);
             _routerCallback(packetStream, this);
+            _ledController.SetLed(3, 0);
 
             Log.Write(LogType.Verbose, LogComponent.E3Mbit, "Received packet (0x{0:x} bytes), sent to router.", receivedDataLength);
         }
@@ -311,6 +321,8 @@ namespace IFS.Transport
                 return;
             }
 
+            _ledController.SetLed(2, 1);
+
             ushort crcVal = CalculateCRC(data, data.Length);
 
             // Construct a new buffer with space for the CRC
@@ -326,6 +338,7 @@ namespace IFS.Transport
 
             // Signal PRU to send the data in the write buffer.
             SetWriteBufferOwner(OWNER_PRU);
+            _ledController.SetLed(2, 0);
 
             Log.Write(LogType.Verbose, LogComponent.E3Mbit, "Packet sent to 3mbit interface.");
         }
@@ -453,9 +466,9 @@ namespace IFS.Transport
             return crc;
         }
 
-        IntPtr _sharedPruMemory;
-
+        private IntPtr _sharedPruMemory;
         private ReceivedPacketCallback _routerCallback;
+        private BeagleBoneLedController _ledController;
 
         // Interface between host and PRU
         // The idea is there are two buffers: r_ and w_.
@@ -505,6 +518,57 @@ namespace IFS.Transport
         const uint W_PTR_OFFSET = 0x400;
         const uint R_PTR_OFFSET = 0x10000;
         const uint MAX_SIZE = 12 * 1024;
+    }
+
+    public class BeagleBoneLedController
+    {
+        const string _ledPath = "/sys/class/leds/beaglebone:green:usr";
+
+        public BeagleBoneLedController()
+        {
+            try
+            {
+                Init();
+            }
+            catch(Exception e)
+            {
+                Log.Write(LogType.Warning, LogComponent.E3Mbit, "Failed to intialize LEDs.  Error: {0}", e.Message);
+            }
+        }
+
+        public void SetLed(int n, int brightness)
+        {
+            if (n >= 0 && n <= _ledStream?.Length)
+            {
+                _ledStream?[n]?.WriteLine($"{brightness}");
+            }
+        }
+
+        public void BlinkLed(int n, int durationMsec)
+        {
+            SetLed(n, 1);
+            Thread.Sleep(durationMsec);
+            SetLed(n, 0);
+        }
+
+        private void Init()
+        {
+            _ledStream = new StreamWriter[4];
+
+            for (int i = 0; i < 4; i++)
+            {
+                using (StreamWriter sw = new StreamWriter(Path.Combine(_ledPath + $"{i}", "trigger")))
+                {
+                    sw.WriteLine("none");
+                }
+
+                _ledStream[i] = new StreamWriter(Path.Combine(_ledPath + $"{i}", "brightness"));
+                _ledStream[i].AutoFlush = true;
+                SetLed(i, 0);
+            }
+        }
+
+        private StreamWriter[] _ledStream;
     }
 
     /// <summary>
