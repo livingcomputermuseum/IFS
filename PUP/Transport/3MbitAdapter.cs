@@ -246,7 +246,6 @@ namespace IFS.Transport
         /// </summary>
         private void ReceiveFromNetworkInterface()
         {
-            _ledController.SetLed(3, 1);
             PruInterfaceControlBlock cb = GetInterfaceControlBlock();
 
             if (cb.r_truncated != 0)
@@ -280,6 +279,8 @@ namespace IFS.Transport
                 return;
             }
 
+            _ledController.SetLed(3, 1);
+
             // Grab the received data from the shared PRU memory:
             byte[] durationBuffer = new byte[receivedDataLength];
             Marshal.Copy(new IntPtr(_sharedPruMemory.ToInt64() + R_PTR_OFFSET), durationBuffer, 0, receivedDataLength);
@@ -291,6 +292,7 @@ namespace IFS.Transport
             if (decodedPacket == null)
             {
                 Log.Write(LogType.Warning, LogComponent.E3Mbit, "Received bad packet.");
+                _ledController.SetLed(3, 0);
                 return;
             }
 
