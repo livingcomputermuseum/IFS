@@ -63,6 +63,14 @@ namespace IFS.Gateway
             }
         }
 
+        public override void Terminate()
+        {
+            if (_gatewayInfoThread.IsAlive)
+            {
+                _gatewayInfoThread.Abort();
+            }
+        }
+
         private void SendGatewayInformationResponse(PUP p)
         {
             //
