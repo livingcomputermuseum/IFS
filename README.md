@@ -1,3 +1,11 @@
+
+NOTE: This repository is no longer being maintained.  Please see:
+
+https://github.com/jdersch/IFS
+
+For the latest work-in-progress.
+
+
 Readme.txt for IFS v1.4:
 
 1.0 Introduction and Overview
