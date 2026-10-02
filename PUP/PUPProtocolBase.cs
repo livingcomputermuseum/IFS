@@ -86,6 +86,11 @@ namespace IFS
         /// <param name="p"></param>
         public abstract void RecvData(PUP p);
 
+        /// <summary>
+        /// Called by dispatcher when server shuts down.
+        /// </summary>
+        public virtual void Terminate() {}
+
     }
 
 }

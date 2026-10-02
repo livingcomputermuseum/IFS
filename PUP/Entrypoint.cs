@@ -38,7 +38,6 @@ namespace IFS
             // Shut things down
             Console.WriteLine("Shutting down, please wait...");
             Router.Instance.Shutdown();
-
         }
 
         private static void PrintHerald()

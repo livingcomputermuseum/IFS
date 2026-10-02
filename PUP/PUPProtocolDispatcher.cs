@@ -46,7 +46,13 @@ namespace IFS
         {
             _breathOfLifeServer.Shutdown();
             BSPManager.Shutdown();
-            //EFTPManager.Shutdown();
+            EFTPManager.Shutdown();
+            foreach (KeyValuePair<uint, PUPProtocolEntry> entry in _dispatchMap) {
+                if(entry.Value.ConnectionType == ConnectionType.Connectionless)
+                {
+                    entry.Value.ProtocolImplementation.Terminate();
+                }
+            }
         }                    
 
         public void ReceivePUP(PUP pup)
